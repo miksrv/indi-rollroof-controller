@@ -9,7 +9,6 @@
    'QUERY' is used to determine if the roof is fully open or fully closed.
    Unlike the usual firmata scenario, the client does not have direct control over the pins.
 
-
    Plug pins to motor controller (this is a custom plug wired beween contactors and motor to enable easy maintenance, not used in code)
    1 Live Supply
    2 Neutral Supply
@@ -24,19 +23,16 @@
 #include <Wire.h>
 #include <Firmata.h>
 
-/*==============================================================================
+/*==============================================
    ROOF SPECIFIC GLOBAL VARIABLES
-  ============================================================================*/
-//pin constants
-const int relayRoofOpenPin1 =  3;     
-//const int relayRoofOpenPin2 =  6;     
-const int relayRoofClosePin1 =  2;      
-//const int relayRoofClosePin2 =  5;      
-const int fullyClosedStopSwitchPin =  4;
-const int fullyOpenStopSwitchPin =  5;
-
-const int parkTelescopeRA =  6;
-const int parkTelescopeDEC = 7;
+  ==============================================*/
+// PIN Constants
+const int pinRelayOpen        = 3;
+const int pinRelayClose       = 2;    
+const int pinLimitSwitchClose = 4;
+const int pinLimitSwitchOpen  = 5;
+const int parkTelescopeRA     = 6;
+const int parkTelescopeDEC    = 7;
 
 const int ledPin =  13;
 //Roof state constants
@@ -60,13 +56,11 @@ void setup()
   Firmata.setFirmwareVersion(FIRMATA_MAJOR_VERSION, FIRMATA_MINOR_VERSION);
   Firmata.attach(STRING_DATA, stringCallback);
   Firmata.begin(57600);
-  pinMode(relayRoofOpenPin1, OUTPUT);
-  pinMode(relayRoofClosePin1, OUTPUT);
-  //pinMode(relayRoofOpenPin2, OUTPUT);
-  //pinMode(relayRoofClosePin2, OUTPUT);
+  pinMode(pinRelayOpen, OUTPUT);
+  pinMode(pinRelayClose, OUTPUT);
   
-  pinMode(fullyOpenStopSwitchPin, INPUT);
-  pinMode(fullyClosedStopSwitchPin, INPUT);
+  pinMode(pinLimitSwitchOpen, INPUT);
+  pinMode(pinLimitSwitchClose, INPUT);
 
   pinMode(parkTelescopeRA, INPUT_PULLUP);
   pinMode(parkTelescopeDEC, INPUT_PULLUP);
@@ -92,35 +86,33 @@ void loop()
   ============================================================================*/
 void stringCallback(char *myString)
 {
-
-
-  int openState  = digitalRead(fullyOpenStopSwitchPin);
-  int closeState = digitalRead(fullyClosedStopSwitchPin);
+  int openState  = digitalRead(pinLimitSwitchOpen);
+  int closeState = digitalRead(pinLimitSwitchClose);
   
   String commandString = String(myString);
   if (commandString.equals("OPEN")) {
-//    if (digitalRead(parkTelescopeRA) == LOW && digitalRead(parkTelescopeDEC) == LOW) {
-//      roofState = roofOpening;
-//    } else {
-//      Firmata.sendString("NOTELESCOPEPARK");
-//    }
+    if (digitalRead(parkTelescopeRA) == LOW && digitalRead(parkTelescopeDEC) == LOW) {
+      roofState = roofOpening;
+    } else {
+      Firmata.sendString("NOTELESCOPEPARK");
+    }
 
     roofState = roofOpening;
   } else if (commandString.equals("CLOSE")) {
-//    if (digitalRead(parkTelescopeRA) == LOW && digitalRead(parkTelescopeDEC) == LOW) {
-//      roofState = roofClosing;
-//    } else {
-//      Firmata.sendString("NOTELESCOPEPARK");
-//    }
+    if (digitalRead(parkTelescopeRA) == LOW && digitalRead(parkTelescopeDEC) == LOW) {
+      roofState = roofClosing;
+    } else {
+      Firmata.sendString("NOTELESCOPEPARK");
+    }
 
     roofState = roofClosing;
   } else if (commandString.equals("ABORT")) {
     roofState = roofStopped;
   } else if (commandString.equals("QUERY")) {
     
-//    if (digitalRead(parkTelescopeRA) != LOW && digitalRead(parkTelescopeDEC) != LOW) {
-//      Firmata.sendString("NOTELESCOPEPARK");
-//    } else {
+    if (digitalRead(parkTelescopeRA) != LOW && digitalRead(parkTelescopeDEC) != LOW) {
+      Firmata.sendString("NOTELESCOPEPARK");
+    } else {
       if (openState == HIGH && closeState == LOW) {
         Firmata.sendString("OPEN");
       } else if (closeState == HIGH && openState == LOW) {
@@ -128,7 +120,7 @@ void stringCallback(char *myString)
       } else {
         Firmata.sendString("UNKNOWN");
       }
-//    }
+    }
   }
 }
 
@@ -154,10 +146,8 @@ void handleState() {
    Switch off all motor relays
 */
 void motorOff() {
-  digitalWrite(relayRoofOpenPin1, HIGH);
-  digitalWrite(relayRoofClosePin1, HIGH);
-  //digitalWrite(relayRoofOpenPin2, LOW);
-  //digitalWrite(relayRoofClosePin2, LOW);
+  digitalWrite(pinRelayOpen, HIGH);
+  digitalWrite(pinRelayClose, HIGH);
   delay(1000);
 }
 
@@ -167,14 +157,12 @@ void motorOff() {
 void motorReverse() {
   motorOff();
 
-  digitalWrite(relayRoofOpenPin1, LOW);
+  digitalWrite(pinRelayOpen, LOW);
   unsigned long activateTime = millis();
 
-  while((millis() - activateTime) < 800) {
-    //Задержка в 2 секунды
-  }
-  digitalWrite(relayRoofOpenPin1, HIGH);
-  //digitalWrite(relayRoofOpenPin2, HIGH);
+  while((millis() - activateTime) < 800) {}
+  digitalWrite(pinRelayOpen, HIGH);
+
   hoistOnTime = millis();
 }
 
@@ -183,15 +171,12 @@ void motorReverse() {
 */
 void motorFwd() {
   motorOff();
-  digitalWrite(relayRoofClosePin1, LOW);
+  digitalWrite(pinRelayClose, LOW);
   unsigned long activateTime = millis();
 
-  while((millis() - activateTime) < 800) {
-    //Задержка в 2 секунды
-  }
-  digitalWrite(relayRoofClosePin1, HIGH);
-  
-  //digitalWrite(relayRoofClosePin2, HIGH);
+  while((millis() - activateTime) < 800) {}
+  digitalWrite(pinRelayClose, HIGH);
+
   hoistOnTime = millis();
 }
 
@@ -209,7 +194,7 @@ long roofMotorRunDuration() {
 
 void safetyCutout() {
   if (roofMotorRunDuration() > 20000) {
-    if ((roofState == roofOpening && digitalRead(fullyOpenStopSwitchPin) == HIGH) || (roofState == roofClosing && digitalRead(fullyClosedStopSwitchPin) == HIGH)) {
+    if ((roofState == roofOpening && digitalRead(pinLimitSwitchOpen) == HIGH) || (roofState == roofClosing && digitalRead(pinLimitSwitchClose) == HIGH)) {
       roofState = roofStopped;
     }    
   }
@@ -217,13 +202,13 @@ void safetyCutout() {
 
 /**
    LED is used to provide visual clues to the state of the roof controller.
-   Really not necessary, but handy for debugging wiring and mechanical problems
+   Really not necessary, but handy for debugging wiring and mechanical problem
 */
 void handleLEDs() {
-  //Set an LED on if the corresponding fully open switch is on.
-  if (digitalRead(fullyClosedStopSwitchPin) == HIGH && digitalRead(fullyOpenStopSwitchPin) == LOW) {
+  // Set an LED on if the corresponding fully open switch is on.
+  if (digitalRead(pinLimitSwitchClose) == HIGH && digitalRead(pinLimitSwitchOpen) == LOW) {
     toggleLed(50);
-  } else if (digitalRead(fullyOpenStopSwitchPin) == HIGH && digitalRead(fullyClosedStopSwitchPin) == LOW) {
+  } else if (digitalRead(pinLimitSwitchOpen) == HIGH && digitalRead(pinLimitSwitchClose) == LOW) {
     toggleLed(1000);
   } else {
     digitalWrite(ledPin, LOW);

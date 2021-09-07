@@ -1,8 +1,0 @@
-/home/mik/Downloads/indi-aldiroof-master/indi-driver/build/CMakeFiles/install/strip.dir
-/home/mik/Downloads/indi-aldiroof-master/indi-driver/build/CMakeFiles/install/local.dir
-/home/mik/Downloads/indi-aldiroof-master/indi-driver/build/CMakeFiles/install.dir
-/home/mik/Downloads/indi-aldiroof-master/indi-driver/build/CMakeFiles/list_install_components.dir
-/home/mik/Downloads/indi-aldiroof-master/indi-driver/build/CMakeFiles/rebuild_cache.dir
-/home/mik/Downloads/indi-aldiroof-master/indi-driver/build/CMakeFiles/edit_cache.dir
-/home/mik/Downloads/indi-aldiroof-master/indi-driver/build/CMakeFiles/indi_aldiroof.dir
-/home/mik/Downloads/indi-aldiroof-master/indi-driver/build/CMakeFiles/firmata.dir

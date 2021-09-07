@@ -1,2 +1,0 @@
-/usr/bin/indi_aldiroof
-/usr/share/indi/indi_aldiroof.xml
