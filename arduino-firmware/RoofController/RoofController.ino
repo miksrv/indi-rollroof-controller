@@ -59,8 +59,8 @@ void setup()
   pinMode(pinRelayOpen, OUTPUT);
   pinMode(pinRelayClose, OUTPUT);
   
-  pinMode(pinLimitSwitchOpen, INPUT);
-  pinMode(pinLimitSwitchClose, INPUT);
+  pinMode(pinLimitSwitchOpen, INPUT_PULLUP); // INPUT
+  pinMode(pinLimitSwitchClose, INPUT_PULLUP); // INPUT
 
   pinMode(parkTelescopeRA, INPUT_PULLUP);
   pinMode(parkTelescopeDEC, INPUT_PULLUP);
@@ -88,40 +88,108 @@ void stringCallback(char *myString)
 {
   int openState  = digitalRead(pinLimitSwitchOpen);
   int closeState = digitalRead(pinLimitSwitchClose);
-  
+
+  int parkStateRa  = digitalRead(parkTelescopeRA);
+  int parkStateDec = digitalRead(parkTelescopeDEC);
+
   String commandString = String(myString);
-  if (commandString.equals("OPEN")) {
-    if (digitalRead(parkTelescopeRA) == LOW && digitalRead(parkTelescopeDEC) == LOW) {
-      roofState = roofOpening;
-    } else {
-      Firmata.sendString("NOTELESCOPEPARK");
-    }
 
+  // CMD: Open roof
+  if (commandString.equals("OPEN") && getTelescopeParkStatus()) {
     roofState = roofOpening;
-  } else if (commandString.equals("CLOSE")) {
-    if (digitalRead(parkTelescopeRA) == LOW && digitalRead(parkTelescopeDEC) == LOW) {
-      roofState = roofClosing;
+  }
+
+  // CMD: Close roof
+  else if (commandString.equals("CLOSE") && getTelescopeParkStatus()) {
+    roofState = roofClosing;
+  }
+
+  // CMD: Abort command
+  else if (commandString.equals("ABORT")) {
+    roofState = roofStopped;
+  }
+
+  // CMD: Query status
+  /**
+   * 10 - Крыша закрыта, телескоп припаркован
+   * 20 - Крыша открыта, телескоп припаркован
+   * 
+   * 11 - Крыша закрыта, нет парковки (DEC, RA)
+   * 12 - Крыша закрыта, нет парковки (DEC)
+   * 13 - Крыша закрыта, нет парковки (RA)
+   * 
+   * 21 - Крыша открыта, нет парковки (DEC, RA)
+   * 22 - Крыша открыта, нет парковки (DEC)
+   * 23 - Крыша открыта, нет парковки (RA)
+   */
+  else if (commandString.equals("QUERY")) {
+    int stateRoof;
+    int statePark;
+
+    if (openState == LOW && closeState == HIGH)
+      stateRoof = 10; // Open roof
+    
+    else if (openState == HIGH && closeState == LOW)
+      stateRoof = 20; // Close roof
+
+    else
+      stateRoof = 30; // Unknow
+
+
+    if (parkStateDec == LOW && parkStateRa == LOW)
+      statePark = 0; // PARK
+      
+    else if (parkStateDec == HIGH && parkStateRa == HIGH)
+      statePark = 1; // NO park DEC, RA 
+
+    else if (parkStateDec == HIGH && parkStateRa == LOW)
+      statePark = 2; // NO park DEC
+
+    else if (parkStateDec == LOW && parkStateRa == HIGH)
+      statePark = 3; // NO park RA
+
+      char cstr[8];
+
+    Firmata.sendString( itoa(stateRoof + statePark, cstr, 10) );
+  }
+
+  // CMD: Query telescope park status
+//  else if (commandString.equals("QT")) {
+//    if (parkStateRa == HIGH && parkStateDec == HIGH) {
+//      Firmata.sendString("TPS1"); // NOPARK (RA, DEC)
+//    } else if (parkStateRa == HIGH && parkStateDec == LOW) {
+//      Firmata.sendString("TPS2"); // NOPARK (RA)
+//    } else if (parkStateRa == LOW && parkStateDec == HIGH) {
+//      Firmata.sendString("TPS3"); // NOPARK (DEC)
+//    } else {
+//      Firmata.sendString("TPS0"); // PARKED
+//    }
+//
+//    return ;
+//  }
+}
+
+/**
+ * Get telescope park sensor status.
+ * Return {true} if telescope parking and roof move safety.
+ */
+bool getTelescopeParkStatus() {
+  int parkStateRa  = digitalRead(parkTelescopeRA);
+  int parkStateDec = digitalRead(parkTelescopeDEC);
+  
+  if (parkStateRa == HIGH || parkStateDec == HIGH) {
+    if (parkStateRa == HIGH && parkStateDec == LOW) {
+      Firmata.sendString("NOTELESCOPEPARK (RA)");
+    } else if (parkStateRa == LOW && parkStateDec == HIGH) {
+      Firmata.sendString("NOTELESCOPEPARK (DEC)");
     } else {
-      Firmata.sendString("NOTELESCOPEPARK");
+      Firmata.sendString("NOTELESCOPEPARK (RA, DEC)");
     }
 
-    roofState = roofClosing;
-  } else if (commandString.equals("ABORT")) {
-    roofState = roofStopped;
-  } else if (commandString.equals("QUERY")) {
-    
-    if (digitalRead(parkTelescopeRA) != LOW && digitalRead(parkTelescopeDEC) != LOW) {
-      Firmata.sendString("NOTELESCOPEPARK");
-    } else {
-      if (openState == HIGH && closeState == LOW) {
-        Firmata.sendString("OPEN");
-      } else if (closeState == HIGH && openState == LOW) {
-        Firmata.sendString("CLOSED");
-      } else {
-        Firmata.sendString("UNKNOWN");
-      }
-    }
+    return false;
   }
+
+  return true;
 }
 
 /**
