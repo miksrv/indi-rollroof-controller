@@ -1,56 +1,37 @@
-/*
-   Firmware for a roll off roof. A simple state-machine based on StandardFirmata,
-   comminicates with indiserver indi_aldiroof driver.
-
-   Firmata is a generic protocol for communicating with arduino microcontrollers.
-   This code based on a the SimpleFirmata and EchoString firmware that comes with the ArduinoIDE (file>examples>firmata)
-
-   4 commands are sent from the driver to this firmware, [ABORT,OPEN,CLOSE,QUERY].
-   'QUERY' is used to determine if the roof is fully open or fully closed.
-   Unlike the usual firmata scenario, the client does not have direct control over the pins.
-
-   Plug pins to motor controller (this is a custom plug wired beween contactors and motor to enable easy maintenance, not used in code)
-   1 Live Supply
-   2 Neutral Supply
-   3 Close live
-   4 Open live
-   5 Close neutral
-   6 Open neutral
-   7 NA
-   8 NA
-
-*/
+/*******************************************************************************
+ * OBSERVATORY ROLL-OFF-ROOF FIRMWARE
+ * 
+ * Firmware for a Arduino controller Roll-Off-Roof observatory. A simple 
+ * state-machine based on StandardFirmata, comminicates with indiserver indi_rollroof driver.
+ * NOTE: Firmata does not function well over USB3. Always use a USB2 port!
+ * 
+ * Sept 2015 Derek OKeeffe
+ * Sept 2019 Mikhail Topchilo (miksoft.pro)
+*******************************************************************************/
 #include <Wire.h>
 #include <Firmata.h>
 
-/*==============================================
-   ROOF SPECIFIC GLOBAL VARIABLES
-  ==============================================*/
-// PIN Constants
-const int pinRelayOpen        = 3;
-const int pinRelayClose       = 2;    
-const int pinLimitSwitchClose = 4;
-const int pinLimitSwitchOpen  = 5;
-const int parkTelescopeRA     = 6;
-const int parkTelescopeDEC    = 7;
+/**
+ * ======= CONFIGURATION =======
+ */
+// If the variable is not commented out, debug mode is activated, messages are sent to the serial port
+// #define DEBUG
 
-const int ledPin =  13;
-//Roof state constants
-const int roofClosed = 0;
-const int roofOpen = 1;
-const int roofStopped = 2;
-const int roofClosing = 3;
-const int roofOpening = 4;
-//actual state of the roof
-volatile int roofState = roofStopped;
-volatile int previousRoofState = roofStopped;
-long hoistOnTime = 0;
+const int pinRelayOpen        = 2; // RELAY: Open roof
+const int pinRelayClose       = 3; // RELAY: Close roof
+const int pinLimitSwitchClose = 4; // SWITCH: Closed roof limit switch 
+const int pinLimitSwitchOpen  = 5; // SWITCH: Opened roof limit switch 
+const int parkTelescopeDEC    = 6; // SWITCH: Telescope parking position on the axis DEC
+const int parkTelescopeRA     = 7; // SWITCH: Telescope parking position on the axis RA
+const int ledPin              = 13; // INDICATOR: Pin for connecting a visual indicator of the roof position (for DEBUG)
+
 long ledToggleTime = 0;
 bool ledState;
+int openState, closeState, parkStateRa, parkStateDec;
 
-/*==============================================================================
-   SETUP()
-  ============================================================================*/
+/**
+ * ======= SETUP =======
+ */
 void setup()
 {
   Firmata.setFirmwareVersion(FIRMATA_MAJOR_VERSION, FIRMATA_MINOR_VERSION);
@@ -67,60 +48,61 @@ void setup()
   
   pinMode(ledPin, OUTPUT);
 
-  motorOff();
+  // By default, the relays should be turned off, so we give them a high signal 
+  digitalWrite(pinRelayOpen, HIGH);
+  digitalWrite(pinRelayClose, HIGH);
 }
 
-/*==============================================================================
-   LOOP()
-  ============================================================================*/
+/**
+ * ======= LOOP =======
+ */
 void loop()
 {
   while (Firmata.available()) {
     Firmata.processInput();
   }
-  handleState();
+
+  #ifdef DEBUG
+    debugLEDs();
+  #endif
 }
 
-/*==============================================================================
-   ROLL OFF ROOF SPECIFIC COMMANDS
-  ============================================================================*/
-void stringCallback(char *myString)
-{
-  int openState  = digitalRead(pinLimitSwitchOpen);
-  int closeState = digitalRead(pinLimitSwitchClose);
-
-  int parkStateRa  = digitalRead(parkTelescopeRA);
-  int parkStateDec = digitalRead(parkTelescopeDEC);
-
+/**
+ * ======= FIRMATA HANDLER =======
+ */
+void stringCallback(char *myString) {
+  openState  = digitalRead(pinLimitSwitchOpen);
+  closeState = digitalRead(pinLimitSwitchClose);
+  parkStateRa  = digitalRead(parkTelescopeRA);
+  parkStateDec = digitalRead(parkTelescopeDEC);
+  
   String commandString = String(myString);
 
   // CMD: Open roof
-  if (commandString.equals("OPEN") && getTelescopeParkStatus()) {
-    roofState = roofOpening;
-  }
+  if (commandString.equals("OPEN") && (parkStateRa == LOW && parkStateDec == LOW))
+    actionRoofOpen();
 
   // CMD: Close roof
-  else if (commandString.equals("CLOSE") && getTelescopeParkStatus()) {
-    roofState = roofClosing;
-  }
+  else if (commandString.equals("CLOSE") && (parkStateRa == LOW && parkStateDec == LOW))
+    actionRoofClose();
 
   // CMD: Abort command
   else if (commandString.equals("ABORT")) {
-    roofState = roofStopped;
+    return ;
   }
 
   // CMD: Query status
   /**
-   * 10 - Крыша закрыта, телескоп припаркован
-   * 20 - Крыша открыта, телескоп припаркован
-   * 
-   * 11 - Крыша закрыта, нет парковки (DEC, RA)
-   * 12 - Крыша закрыта, нет парковки (DEC)
-   * 13 - Крыша закрыта, нет парковки (RA)
-   * 
-   * 21 - Крыша открыта, нет парковки (DEC, RA)
-   * 22 - Крыша открыта, нет парковки (DEC)
-   * 23 - Крыша открыта, нет парковки (RA)
+   * 10 - Roof closed, telescope parked
+   * 20 - Roof open, telescope parked
+   *
+   * 11 - Roof closed, no parking (DEC, RA)
+   * 12 - Roof closed, no parking (DEC)
+   * 13 - Roof closed, no parking (RA)
+   *
+   * 21 - Roof open, no parking (DEC, RA)
+   * 22 - Roof open, no parking (DEC)
+   * 23 - Roof open, no parking (RA)
    */
   else if (commandString.equals("QUERY")) {
     int stateRoof;
@@ -150,142 +132,57 @@ void stringCallback(char *myString)
 
       char cstr[8];
 
-    Firmata.sendString( itoa(stateRoof + statePark, cstr, 10) );
+    return Firmata.sendString( itoa(stateRoof + statePark, cstr, 10) );
   }
-
-  // CMD: Query telescope park status
-//  else if (commandString.equals("QT")) {
-//    if (parkStateRa == HIGH && parkStateDec == HIGH) {
-//      Firmata.sendString("TPS1"); // NOPARK (RA, DEC)
-//    } else if (parkStateRa == HIGH && parkStateDec == LOW) {
-//      Firmata.sendString("TPS2"); // NOPARK (RA)
-//    } else if (parkStateRa == LOW && parkStateDec == HIGH) {
-//      Firmata.sendString("TPS3"); // NOPARK (DEC)
-//    } else {
-//      Firmata.sendString("TPS0"); // PARKED
-//    }
-//
-//    return ;
-//  }
 }
 
 /**
- * Get telescope park sensor status.
- * Return {true} if telescope parking and roof move safety.
+ * Close roof
  */
-bool getTelescopeParkStatus() {
-  int parkStateRa  = digitalRead(parkTelescopeRA);
-  int parkStateDec = digitalRead(parkTelescopeDEC);
-  
-  if (parkStateRa == HIGH || parkStateDec == HIGH) {
-    if (parkStateRa == HIGH && parkStateDec == LOW) {
-      Firmata.sendString("NOTELESCOPEPARK (RA)");
-    } else if (parkStateRa == LOW && parkStateDec == HIGH) {
-      Firmata.sendString("NOTELESCOPEPARK (DEC)");
-    } else {
-      Firmata.sendString("NOTELESCOPEPARK (RA, DEC)");
-    }
-
-    return false;
-  }
-
-  return true;
-}
-
-/**
-   Handle the state of the roof. Act on state change
-*/
-void handleState() {
-  handleLEDs();
-  safetyCutout();
-  if (roofState != previousRoofState) {
-    previousRoofState = roofState;
-    if (roofState == roofOpening) {
-      motorFwd();
-    } else if (roofState == roofClosing) {
-      motorReverse();
-    }  else {
-      motorOff();
-    }
-  }
-}
-
-/**
-   Switch off all motor relays
-*/
-void motorOff() {
-  digitalWrite(pinRelayOpen, HIGH);
-  digitalWrite(pinRelayClose, HIGH);
-  delay(1000);
-}
-
-/**
-   Switch on relays to move motor rev
-*/
-void motorReverse() {
-  motorOff();
+void actionRoofClose() {
+  unsigned long activateTime = millis();
 
   digitalWrite(pinRelayOpen, LOW);
-  unsigned long activateTime = millis();
-
   while((millis() - activateTime) < 800) {}
   digitalWrite(pinRelayOpen, HIGH);
-
-  hoistOnTime = millis();
 }
 
 /**
-   Switch on relays to fwd motor
-*/
-void motorFwd() {
-  motorOff();
-  digitalWrite(pinRelayClose, LOW);
+ * Open roof
+ */
+void actionRoofOpen() {
   unsigned long activateTime = millis();
-
+  
+  digitalWrite(pinRelayClose, LOW);
   while((millis() - activateTime) < 800) {}
   digitalWrite(pinRelayClose, HIGH);
-
-  hoistOnTime = millis();
 }
 
-/**
-   Return the duration in miliseconds that the roof motors have been running
-*/
-long roofMotorRunDuration() {
-  if (roofState == roofOpening || roofState == roofClosing) {
-    return millis() - hoistOnTime;
-  } else {
-    return 0;
-  }
-}
+/** 
+ * LED is used to provide visual clues to the state of the roof controller.
+ * Really not necessary, but handy for debugging wiring and mechanical problem.
+ */
+void debugLEDs() {
+  openState  = digitalRead(pinLimitSwitchOpen);
+  closeState = digitalRead(pinLimitSwitchClose);
+  
+  // Opened roof
+  if (closeState == HIGH && openState == LOW)
+    toggleLed(200);
 
-
-void safetyCutout() {
-  if (roofMotorRunDuration() > 20000) {
-    if ((roofState == roofOpening && digitalRead(pinLimitSwitchOpen) == HIGH) || (roofState == roofClosing && digitalRead(pinLimitSwitchClose) == HIGH)) {
-      roofState = roofStopped;
-    }    
-  }
-}
-
-/**
-   LED is used to provide visual clues to the state of the roof controller.
-   Really not necessary, but handy for debugging wiring and mechanical problem
-*/
-void handleLEDs() {
-  // Set an LED on if the corresponding fully open switch is on.
-  if (digitalRead(pinLimitSwitchClose) == HIGH && digitalRead(pinLimitSwitchOpen) == LOW) {
-    toggleLed(50);
-  } else if (digitalRead(pinLimitSwitchOpen) == HIGH && digitalRead(pinLimitSwitchClose) == LOW) {
+  // Closed roof
+  else if (closeState == LOW && openState == HIGH)
     toggleLed(1000);
-  } else {
+
+  // Where is roof, wtf?
+  else
     digitalWrite(ledPin, LOW);
-  }
 }
 
 void toggleLed(int duration) {
   if (millis() - ledToggleTime > duration) {
     ledToggleTime = millis();
+    
     if (ledState == false ) {
       ledState = true;
       digitalWrite(ledPin, HIGH);

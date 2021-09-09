@@ -1,21 +1,18 @@
-#ifndef AldiRoof_H
-#define AldiRoof_H
+#ifndef RollRoof_H
+#define RollRoof_H
 
 #include <indidome.h>
 
-/*  Some headers we need */
 #include <math.h>
 #include <sys/time.h>
 
-/* Firmata */
 #include "firmata.h"
 
-
-class AldiRoof : public INDI::Dome
+class RollRoof : public INDI::Dome
 {
     public:
-        AldiRoof();
-        virtual ~AldiRoof();
+        RollRoof();
+        virtual ~RollRoof();
 
         virtual bool initProperties();
         const char *getDefaultName();
@@ -28,7 +25,6 @@ class AldiRoof : public INDI::Dome
 
         bool Connect();
         bool Disconnect();
-        bool isTelescopeParked();
 
         void TimerHit();
 
@@ -37,6 +33,7 @@ class AldiRoof : public INDI::Dome
         virtual IPState UnPark();
         virtual bool Abort();
 
+        virtual bool getControllerState();
         virtual bool getFullOpenedLimitSwitch();
         virtual bool getFullClosedLimitSwitch();
 
@@ -45,18 +42,20 @@ class AldiRoof : public INDI::Dome
         IText CurrentStateT[1];
         ITextVectorProperty CurrentStateTP;
 
+        IText CurrentParkT[1];
+        ITextVectorProperty CurrentParkTP;
+
         ISState fullOpenLimitSwitch;
         ISState fullClosedLimitSwitch;
-        bool IsTelescopeParked;
+        bool bTelescopeParkingDEC;
+        bool bTelescopeParkingRA;
 
         double MotionRequest;
         struct timeval MotionStart;
-        bool SetupParms();
 
         float CalcTimeLeft(timeval);
 
         Firmata* sf;
-
 };
 
 #endif

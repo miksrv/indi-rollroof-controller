@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.4.7)
-PROJECT(indi_aldiroof CXX C)
+PROJECT(indi_rollroof CXX C)
 
 set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS}")
 
@@ -28,12 +28,12 @@ set (firmata_SRCS
 add_library(firmata ${firmata_SRCS})
 
 ################ Roll Off ################
-set(aldirolloff_SRCS
-        ${CMAKE_CURRENT_SOURCE_DIR}/aldiroof.cpp
+set(rollroof_SRCS
+        ${CMAKE_CURRENT_SOURCE_DIR}/rollroof.cpp
    )
 
-add_executable(indi_aldiroof ${aldirolloff_SRCS})
-target_link_libraries(indi_aldiroof ${INDI_DRIVER_LIBRARIES} firmata)
-install(TARGETS indi_aldiroof RUNTIME DESTINATION bin )
-install(FILES indi_aldiroof.xml DESTINATION ${INDI_DATA_DIR})
+add_executable(indi_rollroof ${rollroof_SRCS})
+target_link_libraries(indi_rollroof ${INDI_DRIVER_LIBRARIES} firmata)
+install(TARGETS indi_rollroof RUNTIME DESTINATION bin )
+install(FILES indi_rollroof.xml DESTINATION ${INDI_DATA_DIR})
 
