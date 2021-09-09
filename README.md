@@ -18,7 +18,7 @@ The Arduino controller communicates with the INDI driver using the firmata proto
 ## Hardware Parts List
 
 1. Arduino UNO controller (or any other).
-2. 4 X 30A arduino relays module.
+2. 2 X 30A arduino relays module.
 3. Linux machine running INDI server (install the driver on).
 4. (Optional) 3D printed case.
 
@@ -32,8 +32,8 @@ To add a driver to the INDI Web Manager list, edit the following file and add th
 `/usr/share/indi/drivers.xml`
 
 ```
-<device label="Aldi Roof">
-  <driver name="Aldi Roof">indi_aldiroof</driver>
+<device label="Roll Roof">
+  <driver name="Roll Roof">indi_rollroof</driver>
   <version>1.0</version>
 </device>
 ```
