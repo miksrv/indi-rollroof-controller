@@ -14,14 +14,14 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: configure
-      working-directory: ./indi-driver
       run: ./configure
+      working-directory: ./indi-driver
     - name: make
-      working-directory: ./indi-driver
       run: make
+      working-directory: ./indi-driver
     - name: make check
-      working-directory: ./indi-driver
       run: make check
-    - name: make distcheck
       working-directory: ./indi-driver
+    - name: make distcheck
       run: make distcheck
+      working-directory: ./indi-driver
