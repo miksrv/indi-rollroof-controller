@@ -13,6 +13,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: cmake 
-      run: cmake 
+    - name: make install 
+      run: make install 
       working-directory: ./indi-driver/indi-rollroof
