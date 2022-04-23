@@ -27,6 +27,13 @@ The Arduino controller communicates with the INDI driver using the firmata proto
 1. Flash the firmware to your arduino using the arduino ide.
 2. Build and install the driver on the machine running indi server.
 
+For compile in Ubuntu need to install `cmake`:
+
+```
+sudo apt-get update
+sudo apt-get install cmake
+```
+
 ## Install in INDI web manager
 To add a driver to the INDI Web Manager list, edit the following file and add the section **Domes** lines to the list:  
 `/usr/share/indi/drivers.xml`
