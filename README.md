@@ -39,7 +39,7 @@ To add a driver to the INDI Web Manager list, edit the following file and add th
 `/usr/share/indi/drivers.xml`
 
 ```
-<device label="Roll Roof">
+<device label="Roll Roof" manufacturer="miksoft">
   <driver name="Roll Roof">indi_rollroof</driver>
   <version>1.0</version>
 </device>
