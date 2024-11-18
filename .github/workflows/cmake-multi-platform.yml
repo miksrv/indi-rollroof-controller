@@ -23,5 +23,5 @@ jobs:
 
     - name: Run build script
       run: |
-        chmod +x ./indi-rollroof/build.sh
-        ./indi-rollroof/build.sh
+        chmod +x ./indi-driver/build.sh
+        ./indi-driver/build.sh
