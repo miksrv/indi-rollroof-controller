@@ -1,48 +1,64 @@
-Observatory Roof Controller
-===============
+# Observatory Roof Controller
 
-This project is a fork of the original INDI Aldiroof author [Derek OKeeffe](https://github.com/dokeeffe/indi-aldiroof).
-In my project, I used a different roof drive, which is controlled by only two signals - OPEN and CLOSE. 
-An [INDI](http://indilib.org/) driver and arduino firmware to control a roll off roof of an astronomical observatory.
+A fork of the original [INDI Aldiroof](https://github.com/dokeeffe/indi-aldiroof) project by Derek O'Keeffe, tailored to work with a simplified roof drive mechanism that operates with just two signals: **OPEN** and **CLOSE**.
 
-![observatory](./documentation/allsky-25.gif)
+This project includes an [INDI](http://indilib.org/) driver and Arduino firmware for controlling a roll-off roof in an astronomical observatory.  
 
-The roof of the astronomical observatory is driven by a motor and a sliding gate reducer.
-Two relays and an Arduino controller are used to control the engine controller.
-For safety, the roof end positions and parking sensors (reed switches) of the telescope are connected to the controller.
-The Arduino controller communicates with the INDI driver using the firmata protocol.
+![Observatory](./documentation/allsky-25.gif)
 
-![Motor-controller](./documentation/motor-controller.jpg)
+## Features
 
-----------------------
-## Hardware Parts List
+- Roof control using a motor and a sliding gate reducer.
+- Control via two 30A relays connected to an Arduino microcontroller.
+- Safety features, including limit switches for roof position and parking sensors (reed switches) for the telescope.
+- Communication between the Arduino and the INDI driver using the Firmata protocol.
 
-1. Arduino UNO controller (or any other).
-2. 2 X 30A arduino relays module.
-3. Linux machine running INDI server (install the driver on).
-4. (Optional) 3D printed case.
+![Motor Controller](./documentation/motor-controller.jpg)
 
-## Building / Installing Software
+## Hardware Requirements
 
-1. Flash the firmware to your arduino using the arduino ide.
-2. Build and install the driver on the machine running indi server.
+### Components
+1. **Arduino UNO** (or any compatible microcontroller).
+2. **2 x 30A relay modules** for Arduino.
+3. A **Linux machine** running the INDI server.
+4. *(Optional)* 3D-printed case for the hardware.
 
-For compile in Ubuntu need to install `cmake` and libraries for INDI develop:
+## Software Setup
 
-```
-sudo apt-get update
-sudo apt-get install cmake libindi-dev libnova-dev
-```
+### Flashing Firmware
+1. Open the Arduino IDE.
+2. Upload the firmware to your Arduino board.
 
-## Install in INDI web manager
-To add a driver to the INDI Web Manager list, edit the following file and add the section **Domes** lines to the list:  
-`/usr/share/indi/drivers.xml`
+### Building the INDI Driver
+1. Install necessary dependencies on your Linux machine:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install cmake libindi-dev libnova-dev
+   ```
+2. Clone the repository and build the driver:
+   ```bash
+   git clone <repository-url>
+   cd <repository-directory>
+   mkdir build && cd build
+   cmake ..
+   make
+   sudo make install
+   ```
 
-```
-<device label="Roll Roof" manufacturer="miksoft">
-  <driver name="Roll Roof">indi_rollroof</driver>
-  <version>1.0</version>
-</device>
-```
+### Configuring INDI Web Manager
+To add the driver to the INDI Web Manager, modify the driver list:
 
-![Arduino-controller](./documentation/arduino-controller.jpg)
+1. Edit the file `/usr/share/indi/drivers.xml`.
+2. Add the following lines under the `<Domes>` section:
+   ```xml
+   <device label="Roll Roof" manufacturer="miksoft">
+     <driver name="Roll Roof">indi_rollroof</driver>
+     <version>1.0</version>
+   </device>
+   ```
+### Arduino Controller Setup
+![Arduino Controller](./documentation/arduino-controller.jpg)
+
+## Acknowledgments
+
+This project is based on the work of [Derek O'Keeffe](https://github.com/dokeeffe/indi-aldiroof) and integrates with the [INDI Library](http://indilib.org/). Special thanks to the open-source community for making projects like this possible.
