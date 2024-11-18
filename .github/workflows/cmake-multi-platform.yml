@@ -14,7 +14,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install dependencies
       run: |
@@ -23,5 +23,5 @@ jobs:
 
     - name: Run build script
       run: |
-        chmod +x ./indi-rollroof/install.sh
-        ./indi-rollroof/install.sh
+        chmod +x ./indi-rollroof/build.sh
+        ./indi-rollroof/build.sh
