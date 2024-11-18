@@ -30,20 +30,34 @@ This project includes an [INDI](http://indilib.org/) driver and Arduino firmware
 2. Upload the firmware to your Arduino board.
 
 ### Building the INDI Driver
-1. Install necessary dependencies on your Linux machine:
+
+Follow these steps to install the necessary dependencies and build the driver:
+
+1. **Install dependencies**  
+   Ensure your Linux machine has the required tools and libraries:
    ```bash
    sudo apt-get update
-   sudo apt-get install cmake libindi-dev libnova-dev
+   sudo apt-get install -y cmake libindi-dev libnova-dev
    ```
-2. Clone the repository and build the driver:
+
+2. **Clone the repository**  
+   Download the project from GitHub:
    ```bash
    git clone <repository-url>
    cd <repository-directory>
-   mkdir build && cd build
-   cmake ..
-   make
-   sudo make install
    ```
+
+3. **Build and install**  
+   Use the included script to build and install the driver:
+   ```bash
+   chmod +x ./indi-rollroof/install.sh
+   ./indi-rollroof/install.sh
+   ```
+
+The script will:
+- Create a `build` directory for the compiled files.
+- Configure the project with `cmake`.
+- Compile and install the driver using `make install`.
 
 ### Configuring INDI Web Manager
 To add the driver to the INDI Web Manager, modify the driver list:
