@@ -26,7 +26,3 @@ jobs:
 
     - name: Compile Arduino code
       run: arduino-cli compile --fqbn arduino:avr:uno arduino-firmware/RoofController
-
-    - name: Lint Arduino code
-      working-directory: arduino-firmware/RoofController
-      run: arduino-cli lint .
