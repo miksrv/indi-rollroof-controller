@@ -25,9 +25,8 @@ jobs:
         arduino-cli lib install Firmata
 
     - name: Compile Arduino code
-      working-directory: arduino-firmware
-      run: arduino-cli compile --fqbn arduino:avr:uno .
+      run: arduino-cli compile --fqbn arduino:avr:uno arduino-firmware/RoofController
 
     - name: Lint Arduino code
-      working-directory: arduino-firmware
+      working-directory: arduino-firmware/RoofController
       run: arduino-cli lint .
