@@ -1,78 +1,101 @@
 # Observatory Roof Controller
 
-A fork of the original [INDI Aldiroof](https://github.com/dokeeffe/indi-aldiroof) project by Derek O'Keeffe, tailored to work with a simplified roof drive mechanism that operates with just two signals: **OPEN** and **CLOSE**.
+[![Arduino Code Check](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/arduino-check.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/arduino-check.yml) 
+[![Build and Test](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/cmake-multi-platform.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/cmake-multi-platform.yml)
 
-This project includes an [INDI](http://indilib.org/) driver and Arduino firmware for controlling a roll-off roof in an astronomical observatory.  
+A fork of the original [INDI Aldiroof](https://github.com/dokeeffe/indi-aldiroof) project by Derek O'Keeffe, designed for simplified roll-off roof mechanisms requiring only two signals: **OPEN** and **CLOSE**.
 
-![Observatory](./documentation/allsky-25.gif)
+This project includes an [INDI](http://indilib.org/) driver and Arduino firmware to manage a roll-off roof for astronomical observatories.
 
-## Features
+![Observatory in Action](./documentation/allsky-25.gif)
 
-- Roof control using a motor and a sliding gate reducer.
-- Control via two 30A relays connected to an Arduino microcontroller.
-- Safety features, including limit switches for roof position and parking sensors (reed switches) for the telescope.
-- Communication between the Arduino and the INDI driver using the Firmata protocol.
+## Key Features
 
-![Motor Controller](./documentation/motor-controller.jpg)
+- **Efficient Roof Operation**: Control a motor-driven sliding gate reducer with just two signals.
+- **Hardware Safety**: Includes limit switches for roof position and reed switches for telescope parking.
+- **Simple Electronics**: Two 30A relays connected to an Arduino handle all roof movements.
+- **Seamless Communication**: Uses the Firmata protocol for interaction between the Arduino and the INDI driver.
+
+![Motor Controller Hardware](./documentation/motor-controller.jpg)
 
 ## Hardware Requirements
 
 ### Components
-1. **Arduino UNO** (or any compatible microcontroller).
-2. **2 x 30A relay modules** for Arduino.
-3. A **Linux machine** running the INDI server.
-4. *(Optional)* 3D-printed case for the hardware.
+- **Microcontroller**: Arduino UNO (or compatible board).
+- **Relays**: Two 30A relay modules.
+- **Sensors**: Limit switches and reed switches for positional feedback.
+- **Server**: A Linux-based machine running the INDI server.
+- *(Optional)* A custom 3D-printed case for the hardware.
 
 ## Software Setup
 
-### Flashing Firmware
-1. Open the Arduino IDE.
-2. Upload the firmware to your Arduino board.
+### 1. Flashing the Arduino Firmware
+1. Open the [Arduino IDE](https://www.arduino.cc/en/software).
+2. Connect your Arduino board to your computer.
+3. Navigate to the `arduino-firmware/RoofController` directory.
+4. Open `RoofController.ino` and upload the firmware.
 
-### Building the INDI Driver
+### 2. Building and Installing the INDI Driver
 
-Follow these steps to install the necessary dependencies and build the driver:
-
-1. **Install dependencies**  
-   Ensure your Linux machine has the required tools and libraries:
+1. **Install Required Dependencies**  
+   Make sure your system is up to date and install the necessary libraries:
    ```bash
    sudo apt-get update
    sudo apt-get install -y cmake libindi-dev libnova-dev
    ```
 
-2. **Clone the repository**  
-   Download the project from GitHub:
+2. **Clone the Repository**  
+   Clone this project to your machine:
    ```bash
    git clone <repository-url>
    cd <repository-directory>
    ```
 
-3. **Build and install**  
-   Use the included script to build and install the driver:
+3. **Build and Install the Driver**  
+   Run the provided script:
    ```bash
    chmod +x ./indi-rollroof/install.sh
    ./indi-rollroof/install.sh
    ```
+   This script will:
+   - Create a `build` directory.
+   - Configure the driver using `cmake`.
+   - Compile and install the driver via `make install`.
 
-The script will:
-- Create a `build` directory for the compiled files.
-- Configure the project with `cmake`.
-- Compile and install the driver using `make install`.
-
-### Configuring INDI Web Manager
-To add the driver to the INDI Web Manager, modify the driver list:
-
-1. Edit the file `/usr/share/indi/drivers.xml`.
-2. Add the following lines under the `<Domes>` section:
+### 3. Configuring the INDI Web Manager
+To integrate the driver with the INDI Web Manager:
+1. Open `/usr/share/indi/drivers.xml` for editing:
+   ```bash
+   sudo nano /usr/share/indi/drivers.xml
+   ```
+2. Add this configuration under the `<Domes>` section:
    ```xml
    <device label="Roll Roof" manufacturer="miksoft">
      <driver name="Roll Roof">indi_rollroof</driver>
      <version>1.0</version>
    </device>
    ```
-### Arduino Controller Setup
-![Arduino Controller](./documentation/arduino-controller.jpg)
+3. Save and restart the INDI Web Manager.
+
+### 4. Wiring and Hardware Setup
+- Wire the Arduino with relays, sensors, and motor as outlined in the [wiring diagram](./documentation/arduino-controller.jpg).
+- Ensure that:
+  - Limit switches are positioned to detect the fully open and closed states.
+  - Reed switches confirm the telescope’s parked position before closing the roof.
+
+![Arduino Wiring Diagram](./documentation/arduino-controller.jpg)
+
+## Contributing
+
+Contributions are welcome! If you encounter bugs or have suggestions for improvements:
+1. Fork the repository.
+2. Create a feature branch.
+3. Submit a pull request.
 
 ## Acknowledgments
 
-This project is based on the work of [Derek O'Keeffe](https://github.com/dokeeffe/indi-aldiroof) and integrates with the [INDI Library](http://indilib.org/). Special thanks to the open-source community for making projects like this possible.
+This project is based on the work of [Derek O'Keeffe](https://github.com/dokeeffe/indi-aldiroof) and leverages the powerful [INDI Library](http://indilib.org/).  
+Special thanks to the open-source community for enabling projects like this.
+
+### License
+This project is licensed under the [MIT License](./LICENSE).
