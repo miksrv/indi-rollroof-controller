@@ -22,6 +22,7 @@ jobs:
         sudo apt-get install -y cmake libindi-dev libnova-dev
 
     - name: Run build script
+      working-directory: indi-driver
       run: |
-        chmod +x ./indi-driver/build.sh
-        ./indi-driver/build.sh
+        chmod +x build.sh
+        ./build.sh
