@@ -1,0 +1,33 @@
+name: Arduino Code Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Arduino CLI
+      uses: arduino/setup-arduino-cli@v1
+      with:
+        version: 0.33.0
+
+    - name: Install dependencies
+      run: |
+        arduino-cli lib install Firmata
+        arduino-cli lib install Wire
+
+    - name: Compile Arduino code
+      working-directory: arduino-firmware
+      run: arduino-cli compile --fqbn arduino:avr:uno .
+
+    - name: Lint Arduino code
+      working-directory: arduino-firmware
+      run: arduino-cli lint .
