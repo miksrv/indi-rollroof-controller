@@ -1,0 +1,55 @@
+name: Driver build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "indi-driver/**"
+      - ".github/workflows/driver-build.yml"
+  pull_request:
+    paths:
+      - "indi-driver/**"
+      - ".github/workflows/driver-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and install (INDI 2.x, Ubuntu 26.04)
+    runs-on: ubuntu-latest
+    # The INDI PPA publishes INDI 2.x for Ubuntu 26.04 (amd64 only). The plain image is used
+    # instead of the ubuntu-26.04 runner, whose apt prefers amd64v3 archive packages (INDI 1.9)
+    container: ubuntu:26.04
+    timeout-minutes: 15
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # libnova-dev is needed because the INDI headers include libnova headers
+      - name: Install INDI 2.x
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends software-properties-common
+          add-apt-repository -y ppa:mutlaqja/ppa
+          apt-get install -y --no-install-recommends cmake g++ make libindi-dev libnova-dev
+          dpkg-query -W libindi-dev
+
+      - name: Build and install
+        run: bash ./indi-driver/build.sh
+
+      - name: Check installed files
+        run: |
+          test -x /usr/bin/indi_rollroof
+          test -f /usr/share/indi/indi_rollroof.xml

@@ -2,9 +2,10 @@
  * OBSERVATORY ROLL-OFF-ROOF DRIVER
  * Controls an arduino using firmata to switch on/off relays.
  * NOTE: Firmata does not function well over USB3. Always use a USB2 port!
- * 
+ *
  * Sept 2015 Derek OKeeffe
  * Sept 2019 Mikhail Topchilo (miksoft.pro)
+ * Oct 2026 Ported to INDI 2.x
 *******************************************************************************/
 #include "rollroof.h"
 
@@ -15,72 +16,16 @@
 #include <string.h>
 
 #include <memory>
+#include <string>
 
 #include <indicom.h>
 #include "connectionplugins/connectionserial.h"
 
-std::unique_ptr<RollRoof> rollOff(new RollRoof());
+// INDI 2.x dispatches ISGetProperties/ISNew* to every DefaultDevice instance itself
+static std::unique_ptr<RollRoof> rollOff(new RollRoof());
 
 // This is the max ontime (sec) for the motors. Safety cut out.
-#define MAX_ROLLOFF_DURATION 19 
-
-void ISPoll(void *p);
-
-void ISInit()
-{
-   static int isInit =0;
-
-   if (isInit == 1)
-       return;
-
-    isInit = 1;
-
-    if (rollOff.get() == 0)
-        rollOff.reset(new RollRoof());
-
-}
-
-void ISGetProperties(const char *dev)
-{
-    ISInit();
-    rollOff->ISGetProperties(dev);
-}
-
-void ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int num)
-{
-    ISInit();
-    rollOff->ISNewSwitch(dev, name, states, names, num);
-}
-
-void ISNewText(	const char *dev, const char *name, char *texts[], char *names[], int num)
-{
-    ISInit();
-    rollOff->ISNewText(dev, name, texts, names, num);
-}
-
-void ISNewNumber(const char *dev, const char *name, double values[], char *names[], int num)
-{
-    ISInit();
-    rollOff->ISNewNumber(dev, name, values, names, num);
-}
-
-void ISNewBLOB (const char *dev, const char *name, int sizes[], int blobsizes[], char *blobs[], char *formats[], char *names[], int n)
-{
-    INDI_UNUSED(dev);
-    INDI_UNUSED(name);
-    INDI_UNUSED(sizes);
-    INDI_UNUSED(blobsizes);
-    INDI_UNUSED(blobs);
-    INDI_UNUSED(formats);
-    INDI_UNUSED(names);
-    INDI_UNUSED(n);
-}
-
-void ISSnoopDevice (XMLEle *root)
-{
-    ISInit();
-    rollOff->ISSnoopDevice(root);
-}
+#define MAX_ROLLOFF_DURATION 19
 
 RollRoof::RollRoof()
 {
@@ -99,8 +44,6 @@ RollRoof::RollRoof()
  */
 bool RollRoof::initProperties()
 {
-    DEBUG(INDI::Logger::DBG_SESSION, "Init props");
-
     INDI::Dome::initProperties();
 
     SetParkDataType(PARK_NONE);
@@ -117,7 +60,63 @@ bool RollRoof::initProperties()
 
 bool RollRoof::ISSnoopDevice (XMLEle *root)
 {
+    auto activeTelescope = ActiveDeviceTP.findWidgetByName("ACTIVE_TELESCOPE");
+    const char *device   = findXMLAttValu(root, "device");
+    const char *propName = findXMLAttValu(root, "name");
+
+    if (activeTelescope != nullptr && !strcmp(device, activeTelescope->getText()))
+    {
+        // Mount driver went away (whole device or its park property deleted) -> state unknown
+        if (!strcmp(tagXMLEle(root), "delProperty") && (propName[0] == '\0' || !strcmp(propName, "TELESCOPE_PARK")))
+        {
+            if (mountParkKnown)
+                LOG_WARN("Mount park state is UNKNOWN (mount driver disconnected). Roof motion is blocked.");
+
+            mountParkKnown = false;
+            mountParked    = false;
+        }
+
+        else if (!strcmp(propName, "TELESCOPE_PARK"))
+        {
+            bool parkFound = false;
+            bool parkOn    = false;
+
+            for (XMLEle *ep = nextXMLEle(root, 1); ep != nullptr; ep = nextXMLEle(root, 0))
+            {
+                if (!strcmp(findXMLAttValu(ep, "name"), "PARK"))
+                {
+                    parkFound = true;
+                    parkOn    = strstr(pcdataXMLEle(ep), "On") != nullptr;
+                }
+            }
+
+            if (parkFound)
+            {
+                // Only a settled (Ok) PARK=On counts; Busy (parking/unparking) and Alert do not
+                bool parked = parkOn && !strcmp(findXMLAttValu(root, "state"), "Ok");
+
+                if (!mountParkKnown || parked != mountParked)
+                    LOGF_INFO("Mount %s software park state: %s", device, parked ? "PARKED" : "NOT PARKED");
+
+                mountParkKnown = true;
+                mountParked    = parked;
+            }
+        }
+    }
+
 	return INDI::Dome::ISSnoopDevice(root);
+}
+
+void RollRoof::ActiveDevicesUpdated()
+{
+    // A different mount was selected, forget everything we knew about the previous one
+    mountParkKnown = false;
+    mountParked    = false;
+}
+
+bool RollRoof::isMountSoftwareParked()
+{
+    return mountParkKnown && mountParked;
 }
 
 bool RollRoof::Connect()
@@ -127,18 +126,22 @@ bool RollRoof::Connect()
         sf->OnIdle();
 
 		if (strstr(sf->firmata_name, "RoofController")) {
-			DEBUG(INDI::Logger::DBG_SESSION, "ARDUINO BOARD CONNECTED");
-			DEBUGF(INDI::Logger::DBG_SESSION, "FIRMATA VERSION: %s",sf->firmata_name);
+			LOG_INFO("ARDUINO BOARD CONNECTED");
+			LOGF_INFO("FIRMATA VERSION: %s", sf->firmata_name);
 			return true;
 		} else {
-		    DEBUG(INDI::Logger::DBG_SESSION, "ARDUINO BOARD INCOMPATABLE FIRMWARE");
-		    DEBUGF(INDI::Logger::DBG_SESSION, "FIRMATA VERSION: %s",sf->firmata_name);
+		    LOG_ERROR("ARDUINO BOARD INCOMPATABLE FIRMWARE");
+		    LOGF_ERROR("FIRMATA VERSION: %s", sf->firmata_name);
+		    sf->closePort();
+		    delete sf;
+		    sf = nullptr;
 		    return false;
 		}
 
     } else {
-        DEBUG(INDI::Logger::DBG_SESSION, "ARDUINO BOARD FAIL TO CONNECT");
+        LOGF_ERROR("ARDUINO BOARD FAIL TO CONNECT (%s)", serialConnection->port());
         delete sf;
+        sf = nullptr;
         return false;
     }
 }
@@ -150,7 +153,7 @@ RollRoof::~RollRoof()
 
 const char * RollRoof::getDefaultName()
 {
-    return (char *)"Roll Roof";
+    return "Roll Roof";
 }
 
 bool RollRoof::ISNewSwitch (const char *dev, const char *name, ISState *states, char *names[], int n)
@@ -163,21 +166,15 @@ bool RollRoof::ISNewSwitch (const char *dev, const char *name, ISState *states, 
  */
 bool RollRoof::updateProperties()
 {
-    DEBUG(INDI::Logger::DBG_SESSION, "Updating controller props ...");
     INDI::Dome::updateProperties();
 
     if (isConnected())
     {
-        fullOpenLimitSwitch   = ISS_OFF;
-        fullClosedLimitSwitch = ISS_OFF;
-        bTelescopeParkingDEC  = false;
-        bTelescopeParkingRA   = false;
-
         getControllerState();
 
-        defineText(&CurrentStateTP);
-        defineText(&CurrentParkTP);
-    } 
+        defineProperty(&CurrentStateTP);
+        defineProperty(&CurrentParkTP);
+    }
 
     else {
 	   deleteProperty(CurrentStateTP.name);
@@ -192,13 +189,15 @@ bool RollRoof::updateProperties()
 */
 bool RollRoof::Disconnect()
 {
-    sf->closePort();
-    delete sf;
+    if (sf != nullptr) {
+        sf->closePort();
+        delete sf;
+        sf = nullptr;
+    }
 
-    MotionRequest =- 1;
+    MotionRequest = -1;
 
-    DEBUG(INDI::Logger::DBG_SESSION, "ARDUINO BOARD DISCONNECTED");
-    IDSetSwitch (getSwitch("CONNECTION"),"DISCONNECTED\n");
+    LOG_INFO("ARDUINO BOARD DISCONNECTED");
 
     return true;
 }
@@ -208,22 +207,17 @@ bool RollRoof::Disconnect()
  */
 void RollRoof::TimerHit()
 {
+    LOG_DEBUG("Timer hit");
 
-    DEBUG(INDI::Logger::DBG_DEBUG, "Timer hit");
-    
     if (isConnected() == false) return;  //  No need to reset timer if we are not connected anymore
-    if (DomeMotionSP.s != IPS_BUSY) return;
+    if (DomeMotionSP.getState() != IPS_BUSY) return;
 
     // (ABORT) The safety timer has expired called MAX_ROLLOFF_DURATION
     if (MotionRequest < 0) {
-        DEBUG(INDI::Logger::DBG_WARNING, "Roof motion is stopped, the safety timer has expired");
+        LOG_WARN("Roof motion is stopped, the safety timer has expired");
         setDomeState(DOME_IDLE);
 
-        string stateString = "ABORTED";
-        char roofStatus[32];
-        strcpy(roofStatus, stateString.c_str());
-
-        IUSaveText(&CurrentStateT[0], roofStatus);
+        IUSaveText(&CurrentStateT[0], "ABORTED");
         IDSetText(&CurrentStateTP, NULL);
 
         SetTimer(500);
@@ -232,57 +226,37 @@ void RollRoof::TimerHit()
     }
 
     // Roll off is OPENING
-    if (DomeMotionS[DOME_CW].s == ISS_ON) {
-        string stateString = "MOVE: OPENING...";
-
+    if (DomeMotionSP[DOME_CW].getState() == ISS_ON) {
         if (getFullOpenedLimitSwitch()) {
-            setDomeState(DOME_UNPARKED);
             SetParked(false);
-            IUResetSwitch(&ParkSP);
-
-            ParkS[1].s = ISS_ON;
-            ParkSP.s = IPS_OK;
-
-            updateProperties();
+            getControllerState();
 
             return;
         }
 
-        char status[32];
-
-        strcpy(status, stateString.c_str());
-
-        IUSaveText(&CurrentStateT[0], status);
+        IUSaveText(&CurrentStateT[0], "MOVE: OPENING...");
         IDSetText(&CurrentStateTP, NULL);
 
         if (CalcTimeLeft(MotionStart) <= 0) {
-            DEBUG(INDI::Logger::DBG_WARNING, "Exceeded max motor run duration. Aborting.");
+            LOG_WARN("Exceeded max motor run duration. Aborting.");
             Abort();
         }
     }
 
     // Roll Off is CLOSING
-    else if (DomeMotionS[DOME_CCW].s == ISS_ON) {
-        string stateString = "MOVE: CLOSING...";
-
+    else if (DomeMotionSP[DOME_CCW].getState() == ISS_ON) {
         if (getFullClosedLimitSwitch()) {
-            setDomeState(DOME_PARKED);
             SetParked(true);
-
-            updateProperties();
+            getControllerState();
 
             return;
         }
 
-        char status[32];
-
-        strcpy(status, stateString.c_str());
-
-        IUSaveText(&CurrentStateT[0], status);
+        IUSaveText(&CurrentStateT[0], "MOVE: CLOSING...");
         IDSetText(&CurrentStateTP, NULL);
 
         if (CalcTimeLeft(MotionStart) <= 0) {
-            DEBUG(INDI::Logger::DBG_WARNING, "Exceeded max motor run duration. Aborting.");
+            LOG_WARN("Exceeded max motor run duration. Aborting.");
             Abort();
         }
     }
@@ -302,44 +276,50 @@ IPState RollRoof::Move(DomeDirection dir, DomeMotionCommand operation)
 {
     if (operation == MOTION_START)
     {
-        updateProperties();
+        // Safety interlock: the roof moves ONLY when the mount is parked both in
+        // software (mount driver reports PARK) and in hardware (both reed switches)
+        if ( ! isMountSoftwareParked()) {
+            LOG_ERROR("The telescope is NOT PARKED in software (or its park state is unknown), the roof cannot be moved!");
+            return IPS_ALERT;
+        }
 
-        sleep(1);
+        if ( ! getControllerState()) {
+            LOG_ERROR("Roof controller state is unknown, the roof cannot be moved!");
+            return IPS_ALERT;
+        }
 
         if ( ! bTelescopeParkingDEC || ! bTelescopeParkingRA) {
-            DEBUG(INDI::Logger::DBG_WARNING, "The telescope is NOT PARKED, the roof cannot be moved!");
+            LOG_ERROR("The telescope is NOT PARKED by the reed switches, the roof cannot be moved!");
             return IPS_ALERT;
         }
 
-        // If there is a signal to OPEN the roof, but it is already fully open 
+        // If there is a signal to OPEN the roof, but it is already fully open
         else if (dir == DOME_CW && fullOpenLimitSwitch == ISS_ON) {
-            DEBUG(INDI::Logger::DBG_WARNING, "Roof is already fully OPENED");
+            LOG_WARN("Roof is already fully OPENED");
             return IPS_ALERT;
         }
 
-        // If there is a signal to CLOSE the roof, but it is already closed 
+        // If there is a signal to CLOSE the roof, but it is already closed
         else if (dir == DOME_CCW && fullClosedLimitSwitch == ISS_ON) {
-            DEBUG(INDI::Logger::DBG_WARNING, "Roof is already fully CLOSED");
+            LOG_WARN("Roof is already fully CLOSED");
             return IPS_ALERT;
         }
 
-        // If the telescope is not programmatically parked 
+        // If the telescope is not programmatically parked
         else if (dir == DOME_CCW && INDI::Dome::isLocked()) {
-            DEBUG(INDI::Logger::DBG_WARNING, "Cannot close dome when mount is locking. See: Telescope parkng policy, in options tab");
+            LOG_WARN("Cannot close dome when mount is locking. See: Telescope parkng policy, in options tab");
             return IPS_ALERT;
         }
 
-        // Roof open signal 
+        // Roof open signal
         else if (dir == DOME_CW) {
-            DEBUG(INDI::Logger::DBG_SESSION, "Sending command OPEN ...");
-            sleep(1);
+            LOG_INFO("Sending command OPEN ...");
             sf->sendStringData((char *)"OPEN");
         }
 
-        // Roof close signal 
+        // Roof close signal
         else if (dir == DOME_CCW) {
-            DEBUG(INDI::Logger::DBG_SESSION, "Sending command CLOSE ...");
-            sleep(1);
+            LOG_INFO("Sending command CLOSE ...");
             sf->sendStringData((char *)"CLOSE");
         }
 
@@ -347,19 +327,10 @@ IPState RollRoof::Move(DomeDirection dir, DomeMotionCommand operation)
         gettimeofday(&MotionStart,NULL);
         SetTimer(500);
 
-        // DEBUG(INDI::Logger::DBG_SESSION, "Return IPS_BUSY");
-
         return IPS_BUSY;
     }
-    else
-    {
-        DEBUG(INDI::Logger::DBG_SESSION, "WTF WTF ");
-        return (Dome::Abort() ? IPS_OK : IPS_ALERT);
 
-    }
-
-    DEBUG(INDI::Logger::DBG_SESSION, "Return IPS_ALERT");
-    return IPS_ALERT;
+    return (Abort() ? IPS_OK : IPS_ALERT);
 }
 
 /**
@@ -370,7 +341,7 @@ IPState RollRoof::Park()
     IPState rc = INDI::Dome::Move(DOME_CCW, MOTION_START);
     if (rc==IPS_BUSY)
     {
-        DEBUG(INDI::Logger::DBG_SESSION, "Roll off is parking...");
+        LOG_INFO("Roll off is parking...");
         return IPS_BUSY;
     }
     else
@@ -384,7 +355,7 @@ IPState RollRoof::UnPark()
 {
     IPState rc = INDI::Dome::Move(DOME_CW, MOTION_START);
     if (rc==IPS_BUSY) {
-           DEBUG(INDI::Logger::DBG_SESSION, "Roll off is unparking...");
+           LOG_INFO("Roll off is unparking...");
            return IPS_BUSY;
     }
     else
@@ -396,12 +367,15 @@ IPState RollRoof::UnPark()
  */
 bool RollRoof::Abort()
 {
-    DEBUG(INDI::Logger::DBG_SESSION, "Sending command ABORT");
+    if (sf == nullptr)
+        return false;
+
+    LOG_INFO("Sending command ABORT");
     sf->sendStringData((char *)"ABORT");
     sf->OnIdle();
-    MotionRequest =- 1;
+    MotionRequest = -1;
 
-    updateProperties();
+    getControllerState();
 
     return true;
 }
@@ -425,38 +399,75 @@ float RollRoof::CalcTimeLeft(timeval start)
 }
 
 /**
+ * Send QUERY and wait (up to ~1 sec) for the controller to answer.
+ * The previous answer is cleared first, so a stale state is never reused.
+ */
+bool RollRoof::queryController()
+{
+    if (sf == nullptr)
+        return false;
+
+    sf->string_buffer[0] = '\0';
+    sf->sendStringData((char*)"QUERY");
+
+    // OnIdle() waits up to 10 ms for serial data
+    for (int i = 0; i < 100 && sf->string_buffer[0] == '\0'; i++) {
+        if (sf->OnIdle() < 0)
+            break;
+    }
+
+    if (sf->string_buffer[0] == '\0') {
+        LOG_WARN("No response from the roof controller");
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * Get state from Arduino controller.
- * 
- * 10 - Roof closed, telescope parked
- * 20 - Roof open, telescope parked
  *
- * 11 - Roof closed, no parking (DEC, RA)
- * 12 - Roof closed, no parking (DEC)
- * 13 - Roof closed, no parking (RA)
+ * The answer is two digits: roof state + park state.
+ * Roof: 1 - open (open limit switch pressed), 2 - closed (closed limit switch pressed),
+ *       3 - unknown (both or neither pressed, e.g. while moving)
+ * Park: 0 - telescope parked (both reed switches closed), 1 - not parked (DEC, RA),
+ *       2 - not parked (DEC), 3 - not parked (RA)
  *
- * 21 - Roof open, no parking (DEC, RA)
- * 22 - Roof open, no parking (DEC)
- * 23 - Roof open, no parking (RA)
+ * E.g. 20 - roof closed, telescope parked; 13 - roof open, RA not parked.
  */
 bool RollRoof::getControllerState()
 {
-    string roofStateString = "UNKNOWN";
-    string parkStateString = "UNKNOWN";
-    
-    // DEBUG(INDI::Logger::DBG_SESSION, "QUERY: Get controller state");
+    std::string roofStateString = "UNKNOWN";
+    std::string parkStateString = "UNKNOWN";
 
-    sf->sendStringData((char*)"QUERY");
-    sf->OnIdle();
+    // Every query starts from scratch, otherwise a limit switch seen once stays ON forever
+    fullOpenLimitSwitch   = ISS_OFF;
+    fullClosedLimitSwitch = ISS_OFF;
+    bTelescopeParkingDEC  = false;
+    bTelescopeParkingRA   = false;
 
-    string stateString = sf->string_buffer;
+    if ( ! queryController()) {
+        IUSaveText(&CurrentStateT[0], "UNKNOWN");
+        IDSetText(&CurrentStateTP, NULL);
+        IUSaveText(&CurrentParkT[0], "UNKNOWN");
+        IDSetText(&CurrentParkTP, NULL);
+        return false;
+    }
 
-    // DEBUGF(INDI::Logger::DBG_SESSION, "QUERY: Response = %s", stateString.c_str());
+    std::string stateString = sf->string_buffer;
+
+    LOGF_DEBUG("QUERY: Response = %s", stateString.c_str());
+
+    if (stateString.size() < 2) {
+        LOGF_WARN("Unexpected controller response: '%s'", stateString.c_str());
+        return false;
+    }
 
     char roofStatusInt = stateString[0];
     char parkStatusInt = stateString[1];
 
     if (roofStatusInt == '1') {
-        DEBUG(INDI::Logger::DBG_SESSION, "Roof position state: Open");
+        LOG_INFO("Roof position state: Open");
 
         setDomeState(DOME_UNPARKED);
         fullOpenLimitSwitch = ISS_ON;
@@ -464,7 +475,7 @@ bool RollRoof::getControllerState()
     }
 
     else if (roofStatusInt == '2') {
-        DEBUG(INDI::Logger::DBG_SESSION, "Roof position state: Close");
+        LOG_INFO("Roof position state: Close");
 
         setDomeState(DOME_PARKED);
         fullClosedLimitSwitch = ISS_ON;
@@ -473,12 +484,12 @@ bool RollRoof::getControllerState()
 
     else if (roofStatusInt == '3') {
         setDomeState(DOME_IDLE);
-        DEBUG(INDI::Logger::DBG_SESSION, "Roof position state: UNKNOWN");
+        LOG_INFO("Roof position state: UNKNOWN");
     }
 
 
     if (parkStatusInt == '0') {
-        DEBUG(INDI::Logger::DBG_SESSION, "Telescope parkng state: Parked");
+        LOG_INFO("Telescope parkng state: Parked");
 
         bTelescopeParkingRA  = true;
         bTelescopeParkingDEC = true;
@@ -486,37 +497,29 @@ bool RollRoof::getControllerState()
     }
 
     else if (parkStatusInt == '1') {
-        DEBUG(INDI::Logger::DBG_SESSION, "Telescope parkng state: No park DEC, RA");
+        LOG_INFO("Telescope parkng state: No park DEC, RA");
         parkStateString = "NO PARKED (DEC, RA)";
     }
 
     else if (parkStatusInt == '2') {
-        DEBUG(INDI::Logger::DBG_SESSION, "Telescope parkng state: No park DEC");
+        LOG_INFO("Telescope parkng state: No park DEC");
 
         bTelescopeParkingRA = true;
         parkStateString     = "NO PARKED (DEC)";
     }
 
     else if (parkStatusInt == '3') {
-        DEBUG(INDI::Logger::DBG_SESSION, "Telescope parkng state: No park RA");
+        LOG_INFO("Telescope parkng state: No park RA");
 
         bTelescopeParkingDEC = true;
         parkStateString      = "NO PARKED (RA)";
     }
 
-    char roofStatus[32];
-    char parkStatus[32];
-
-    strcpy(roofStatus, roofStateString.c_str());
-    strcpy(parkStatus, parkStateString.c_str());
-
-    IUSaveText(&CurrentStateT[0], roofStatus);
+    IUSaveText(&CurrentStateT[0], roofStateString.c_str());
     IDSetText(&CurrentStateTP, NULL);
 
-    IUSaveText(&CurrentParkT[0], parkStatus);
+    IUSaveText(&CurrentParkT[0], parkStateString.c_str());
     IDSetText(&CurrentParkTP, NULL);
-
-    sleep(1);
 
     return true;
 }
@@ -526,16 +529,12 @@ bool RollRoof::getControllerState()
  */
 bool RollRoof::getFullOpenedLimitSwitch()
 {
-    sf->sendStringData((char*)"QUERY");
-    sf->OnIdle();
+    if ( ! queryController())
+        return false;
 
-    string stateString = sf->string_buffer;
+    std::string stateString = sf->string_buffer;
 
-    // DEBUGF(INDI::Logger::DBG_SESSION, "QUERY: Roof moving, response = %s", stateString.c_str());
-
-    char roofStatusInt = stateString[0];
-
-    if (roofStatusInt == '1') {
+    if (!stateString.empty() && stateString[0] == '1') {
         fullOpenLimitSwitch = ISS_ON;
 
         return true;
@@ -549,16 +548,12 @@ bool RollRoof::getFullOpenedLimitSwitch()
  */
 bool RollRoof::getFullClosedLimitSwitch()
 {
-    sf->sendStringData((char*)"QUERY");
-    sf->OnIdle();
+    if ( ! queryController())
+        return false;
 
-    string stateString = sf->string_buffer;
+    std::string stateString = sf->string_buffer;
 
-    // DEBUGF(INDI::Logger::DBG_SESSION, "QUERY: Roof moving, response = %s", stateString.c_str());
-
-    char roofStatusInt = stateString[0];
-
-    if (roofStatusInt == '2') {
+    if (!stateString.empty() && stateString[0] == '2') {
         fullClosedLimitSwitch = ISS_ON;
 
         return true;
