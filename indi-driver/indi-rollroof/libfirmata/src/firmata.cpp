@@ -71,7 +71,7 @@ int Firmata::writeDigitalPin(unsigned char pin, unsigned char mode) {
 // therefore you need two data bytes to send 8-bits (a char).  
 int Firmata::sendValueAsTwo7bitBytes(int value)
 {
-  int rv;
+  int rv = 0;
   rv |= arduino->sendUchar(value & 127); // LSB
   rv |= arduino->sendUchar(value >> 7 & 127); // MSB
   return rv;
@@ -199,22 +199,26 @@ int Firmata::sendStringData(char* data) {
 int Firmata::init(const char* _serialPort) {
 	arduino = new Arduino();
 	portOpen = 0;
+	memset(firmata_name, 0, sizeof(firmata_name));
+	memset(string_buffer, 0, sizeof(string_buffer));
 	if (arduino->openPort(_serialPort,FIRMATA_DEFAULT_BAUD) != 0) {
 		if (debug) fprintf(stderr,"sf->openPort(%s) failed: exiting\n",_serialPort);
 		return 1;
 	}
 
-	askFirmwareVersion();
-	usleep(1000);
-	while(true) {
-		OnIdle();
-		if(strlen(firmata_name)>0) {
-			if (debug) printf("FIRMATA ARDUINO BOARD:%s\n",firmata_name);
-			fflush(stdout);
-			portOpen=1;
-			break;
-		}
+	// The board auto-resets when the port opens, so keep asking for the firmware
+	// version for ~5 sec instead of waiting forever for a board that never answers
+	for (int attempt = 0; attempt < 500 && strlen(firmata_name) == 0; attempt++) {
+		if (attempt % 100 == 0) askFirmwareVersion();
+		if (OnIdle() < 0) break;
 	}
+	if (strlen(firmata_name) == 0) {
+		if (debug) fprintf(stderr,"No firmware report from %s\n",_serialPort);
+		return 1;
+	}
+	if (debug) printf("FIRMATA ARDUINO BOARD:%s\n",firmata_name);
+	fflush(stdout);
+	portOpen=1;
 	askCapabilities();
 	usleep(1000);
 	OnIdle();
@@ -411,5 +415,6 @@ int Firmata::OnIdle()
 	} else if (r < 0) {
 		return r;
 	}
+	return 0;
 }
 
