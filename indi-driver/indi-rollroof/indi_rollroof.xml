@@ -1,7 +1,0 @@
-<devGroup group="Domes">
-        <device label="Roll Roof">
-                <driver name="Roll Roof">indi_rollroof</driver>
-                <version>2.0</version>
-        </device>
-</devGroup>
-

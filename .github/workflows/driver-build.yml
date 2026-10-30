@@ -53,3 +53,6 @@ jobs:
         run: |
           test -x /usr/bin/indi_rollroof
           test -f /usr/share/indi/indi_rollroof.xml
+          # the INDI Web Manager and KStars only read devGroups under a <driversList> root
+          grep -q "<driversList>" /usr/share/indi/indi_rollroof.xml
+          cat /usr/share/indi/indi_rollroof.xml

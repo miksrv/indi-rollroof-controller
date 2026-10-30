@@ -36,6 +36,9 @@ RollRoof::RollRoof()
 
   MotionRequest = 0;
 
+  // Reported in DRIVER_INFO; the numbers come from CMakeLists.txt (INDI keeps major.minor only)
+  setVersion(ROLLROOF_VERSION_MAJOR, ROLLROOF_VERSION_MINOR);
+
   SetDomeCapability(DOME_CAN_ABORT | DOME_CAN_PARK);
 }
 
