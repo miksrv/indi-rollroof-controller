@@ -9,4 +9,10 @@ cd build
 
 cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release ../indi-rollroof/
 make -j"$(nproc)"
-sudo make install
+
+# root (e.g. in a container) installs directly, a regular user through sudo
+if [ "$(id -u)" -eq 0 ]; then
+    make install
+else
+    sudo make install
+fi

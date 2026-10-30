@@ -1,7 +1,7 @@
 # Observatory Roof Controller
 
-[![Arduino Code Check](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/arduino-check.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/arduino-check.yml) 
-[![Build and Test](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/cmake-multi-platform.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/cmake-multi-platform.yml)
+[![Firmware build](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/firmware-build.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/firmware-build.yml) 
+[![Driver build](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/driver-build.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/driver-build.yml)
 
 A fork of the original [INDI Aldiroof](https://github.com/dokeeffe/indi-aldiroof) project by Derek O'Keeffe, designed for simplified roll-off roof mechanisms requiring only two signals: **OPEN** and **CLOSE**.
 
@@ -41,7 +41,7 @@ Keep the sketch name `RoofController`: Firmata reports it as the firmware name, 
 
 ### 2. Building and Installing the INDI Driver
 
-1. **Install the dependencies** (INDI 2.x development files and libnova, whose headers INDI includes; on Ubuntu the [INDI PPA](https://launchpad.net/~mutlaqja/+archive/ubuntu/ppa) has the current release):
+1. **Install the dependencies** (INDI 2.x development files and libnova, whose headers INDI includes). The [INDI PPA](https://launchpad.net/~mutlaqja/+archive/ubuntu/ppa) has the current INDI 2.x release for Ubuntu 26.04; distribution packages of older Ubuntu releases are INDI 1.x, which the driver no longer supports (CMake stops with "INDI 2.x is required"):
    ```bash
    sudo add-apt-repository ppa:mutlaqja/ppa
    sudo apt-get update

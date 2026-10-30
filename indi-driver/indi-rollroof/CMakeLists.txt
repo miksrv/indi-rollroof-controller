@@ -16,6 +16,13 @@ set (VERSION_MINOR 0)
 # INDI 2.x: headers in <prefix>/include/libindi, driver API in libindidriver
 find_path(INDI_INCLUDE_DIR indidome.h PATH_SUFFIXES libindi REQUIRED)
 find_library(INDI_DRIVER_LIBRARY indidriver REQUIRED)
+
+# INDI 1.x headers compile with confusing errors, fail early with a clear message instead
+file(STRINGS "${INDI_INCLUDE_DIR}/indiversion.h" INDI_VERSION_MAJOR_LINE REGEX "#define INDI_VERSION_MAJOR")
+string(REGEX MATCH "[0-9]+" INDI_VERSION_MAJOR "${INDI_VERSION_MAJOR_LINE}")
+if(INDI_VERSION_MAJOR LESS 2)
+    message(FATAL_ERROR "INDI 2.x is required, found INDI ${INDI_VERSION_MAJOR}.x headers in ${INDI_INCLUDE_DIR}")
+endif()
 set(INDI_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/indi")
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
