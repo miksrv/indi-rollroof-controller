@@ -60,7 +60,63 @@ bool RollRoof::initProperties()
 
 bool RollRoof::ISSnoopDevice (XMLEle *root)
 {
+    auto activeTelescope = ActiveDeviceTP.findWidgetByName("ACTIVE_TELESCOPE");
+    const char *device   = findXMLAttValu(root, "device");
+    const char *propName = findXMLAttValu(root, "name");
+
+    if (activeTelescope != nullptr && !strcmp(device, activeTelescope->getText()))
+    {
+        // Mount driver went away (whole device or its park property deleted) -> state unknown
+        if (!strcmp(tagXMLEle(root), "delProperty") && (propName[0] == '\0' || !strcmp(propName, "TELESCOPE_PARK")))
+        {
+            if (mountParkKnown)
+                LOG_WARN("Mount park state is UNKNOWN (mount driver disconnected). Roof motion is blocked.");
+
+            mountParkKnown = false;
+            mountParked    = false;
+        }
+
+        else if (!strcmp(propName, "TELESCOPE_PARK"))
+        {
+            bool parkFound = false;
+            bool parkOn    = false;
+
+            for (XMLEle *ep = nextXMLEle(root, 1); ep != nullptr; ep = nextXMLEle(root, 0))
+            {
+                if (!strcmp(findXMLAttValu(ep, "name"), "PARK"))
+                {
+                    parkFound = true;
+                    parkOn    = strstr(pcdataXMLEle(ep), "On") != nullptr;
+                }
+            }
+
+            if (parkFound)
+            {
+                // Only a settled (Ok) PARK=On counts; Busy (parking/unparking) and Alert do not
+                bool parked = parkOn && !strcmp(findXMLAttValu(root, "state"), "Ok");
+
+                if (!mountParkKnown || parked != mountParked)
+                    LOGF_INFO("Mount %s software park state: %s", device, parked ? "PARKED" : "NOT PARKED");
+
+                mountParkKnown = true;
+                mountParked    = parked;
+            }
+        }
+    }
+
 	return INDI::Dome::ISSnoopDevice(root);
+}
+
+void RollRoof::ActiveDevicesUpdated()
+{
+    // A different mount was selected, forget everything we knew about the previous one
+    mountParkKnown = false;
+    mountParked    = false;
+}
+
+bool RollRoof::isMountSoftwareParked()
+{
+    return mountParkKnown && mountParked;
 }
 
 bool RollRoof::Connect()
@@ -220,6 +276,13 @@ IPState RollRoof::Move(DomeDirection dir, DomeMotionCommand operation)
 {
     if (operation == MOTION_START)
     {
+        // Safety interlock: the roof moves ONLY when the mount is parked both in
+        // software (mount driver reports PARK) and in hardware (both reed switches)
+        if ( ! isMountSoftwareParked()) {
+            LOG_ERROR("The telescope is NOT PARKED in software (or its park state is unknown), the roof cannot be moved!");
+            return IPS_ALERT;
+        }
+
         if ( ! getControllerState()) {
             LOG_ERROR("Roof controller state is unknown, the roof cannot be moved!");
             return IPS_ALERT;

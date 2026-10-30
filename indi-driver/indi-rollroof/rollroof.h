@@ -37,9 +37,17 @@ class RollRoof : public INDI::Dome
         virtual bool getFullOpenedLimitSwitch();
         virtual bool getFullClosedLimitSwitch();
 
+        void ActiveDevicesUpdated() override;
+
     private:
 
         bool queryController();
+        bool isMountSoftwareParked();
+
+        // Park state of the ACTIVE_TELESCOPE as last reported by its driver.
+        // Unknown (never reported, disconnected, busy, alert) is treated as NOT parked.
+        bool mountParkKnown = false;
+        bool mountParked    = false;
 
         IText CurrentStateT[1] {};
         ITextVectorProperty CurrentStateTP;
