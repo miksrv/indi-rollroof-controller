@@ -4,7 +4,7 @@
 
 ## Layout
 
-- `indi-driver/indi-rollroof/` — the driver: `rollroof.cpp/.h` (`INDI::Dome` subclass), `indi_rollroof.xml` (driver description installed to `/usr/share/indi`), `CMakeLists.txt`
+- `indi-driver/indi-rollroof/` — the driver: `rollroof.cpp/.h` (`INDI::Dome` subclass), `indi_rollroof.xml.cmake` (template of the driver description installed to `/usr/share/indi`; keep the `<driversList>` root, the INDI Web Manager and KStars skip files without it), `CMakeLists.txt`
 - `indi-driver/indi-rollroof/libfirmata/` — bundled Firmata client (`firmata.cpp`, `arduino.cpp` serial port)
 - `indi-driver/build.sh` — configure, build and `sudo make install`
 - `arduino-firmware/RoofController/RoofController.ino` — firmware (StandardFirmata-based, 57600 baud)
@@ -45,7 +45,7 @@ At park the telescope tube lies just under the roof; in any other position the m
 
 ## Versioning and CHANGELOG
 
-The version lives in two places that must match: `VERSION_MAJOR`/`VERSION_MINOR` in `indi-driver/indi-rollroof/CMakeLists.txt` and `<version>` in `indi_rollroof.xml` (shown in the INDI Web Manager / Ekos). Releases are `X.Y.Z` (`X.Y` in those files).
+The version lives in one place: `VERSION_MAJOR`/`VERSION_MINOR`/`VERSION_PATCH` in `indi-driver/indi-rollroof/CMakeLists.txt`. CMake generates the driver XML from `indi_rollroof.xml.cmake` (`<version>X.Y.Z</version>`, shown in the INDI Web Manager / Ekos) and passes major/minor to the driver for `DRIVER_INFO` (INDI keeps only `X.Y` there). Releases are `X.Y.Z`.
 
 Before opening a PR that should be released:
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.1
+
+### Patch Changes
+
+- Driver: Roll Roof now shows up in the INDI Web Manager and Ekos driver lists
+- Driver: reports its real version instead of 1.0
+
 ## 2.0.0
 
 The driver works with INDI 2.x and refuses to move the roof unless the mount is parked.

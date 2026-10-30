@@ -10,8 +10,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(FIRMATA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libfirmata/src/")
+# The driver version: the single source for the driver XML and DRIVER_INFO
 set (VERSION_MAJOR 2)
 set (VERSION_MINOR 0)
+set (VERSION_PATCH 1)
 
 # INDI 2.x: headers in <prefix>/include/libindi, driver API in libindidriver
 find_path(INDI_INCLUDE_DIR indidome.h PATH_SUFFIXES libindi REQUIRED)
@@ -47,5 +49,11 @@ set(rollroof_SRCS
 
 add_executable(indi_rollroof ${rollroof_SRCS})
 target_link_libraries(indi_rollroof ${INDI_DRIVER_LIBRARY} firmata)
+target_compile_definitions(indi_rollroof PRIVATE
+        ROLLROOF_VERSION_MAJOR=${VERSION_MAJOR}
+        ROLLROOF_VERSION_MINOR=${VERSION_MINOR})
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/indi_rollroof.xml.cmake ${CMAKE_CURRENT_BINARY_DIR}/indi_rollroof.xml)
+
 install(TARGETS indi_rollroof RUNTIME DESTINATION bin )
-install(FILES indi_rollroof.xml DESTINATION ${INDI_DATA_DIR})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/indi_rollroof.xml DESTINATION ${INDI_DATA_DIR})
