@@ -1,0 +1,130 @@
+name: Checks
+
+# One workflow for every pull request and every push to main.
+#
+# "Checks passed" is the only status check that main requires. It always runs;
+# the build jobs before it run only when their part of the repository changed
+# (a documentation-only pull request builds nothing), and a manual run
+# (workflow_dispatch) builds everything.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      driver: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.driver == 'true' }}
+      firmware: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.firmware == 'true' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Filter changed paths
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            driver:
+              - "indi-driver/**"
+              - ".github/workflows/checks.yml"
+            firmware:
+              - "arduino-firmware/**"
+              - ".github/workflows/checks.yml"
+
+  driver:
+    name: Driver build (INDI 2.x, Ubuntu 26.04)
+    needs: changes
+    if: needs.changes.outputs.driver == 'true'
+    runs-on: ubuntu-latest
+    # The INDI PPA publishes INDI 2.x for Ubuntu 26.04 (amd64 only). The plain image is used
+    # instead of the ubuntu-26.04 runner, whose apt prefers amd64v3 archive packages (INDI 1.9)
+    container: ubuntu:26.04
+    timeout-minutes: 15
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # libnova-dev is needed because the INDI headers include libnova headers
+      - name: Install INDI 2.x
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends software-properties-common
+          add-apt-repository -y ppa:mutlaqja/ppa
+          apt-get install -y --no-install-recommends cmake g++ make libindi-dev libnova-dev
+          dpkg-query -W libindi-dev
+
+      - name: Build and install
+        run: bash ./indi-driver/build.sh
+
+      - name: Check installed files
+        run: |
+          test -x /usr/bin/indi_rollroof
+          test -f /usr/share/indi/indi_rollroof.xml
+          # the INDI Web Manager and KStars only read devGroups under a <driversList> root
+          grep -q "<driversList>" /usr/share/indi/indi_rollroof.xml
+          cat /usr/share/indi/indi_rollroof.xml
+
+  firmware:
+    name: Firmware build (Arduino Uno)
+    needs: changes
+    if: needs.changes.outputs.firmware == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compile sketch
+        uses: arduino/compile-sketches@d7af6619a62e765d91f0a4d65b40cf061537a15d # v1.1.3
+        with:
+          fqbn: arduino:avr:uno
+          sketch-paths: |
+            - arduino-firmware/RoofController
+          libraries: |
+            - name: Firmata
+          enable-warnings-report: true
+
+  # The gate: required by the "Protect main" ruleset. Skipped builds count as passed,
+  # a failed or cancelled build fails the gate.
+  checks:
+    name: Checks passed
+    needs: [changes, driver, firmware]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Report
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: echo "$RESULTS"
+
+      - name: Fail if a build failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
