@@ -3,13 +3,7 @@ name: Firmware build
 on:
   push:
     branches: [main]
-    paths:
-      - "arduino-firmware/**"
-      - ".github/workflows/firmware-build.yml"
   pull_request:
-    paths:
-      - "arduino-firmware/**"
-      - ".github/workflows/firmware-build.yml"
   workflow_dispatch:
 
 permissions:

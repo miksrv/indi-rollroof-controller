@@ -3,13 +3,7 @@ name: Driver build
 on:
   push:
     branches: [main]
-    paths:
-      - "indi-driver/**"
-      - ".github/workflows/driver-build.yml"
   pull_request:
-    paths:
-      - "indi-driver/**"
-      - ".github/workflows/driver-build.yml"
   workflow_dispatch:
 
 permissions:
