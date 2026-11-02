@@ -1,68 +1,91 @@
-# Observatory Roof Controller
+# Roll Roof — INDI roll-off roof controller
 
-[![Firmware build](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/firmware-build.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/firmware-build.yml) 
 [![Driver build](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/driver-build.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/driver-build.yml)
+[![Firmware build](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/firmware-build.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/firmware-build.yml)
+[![Release](https://img.shields.io/github/v/release/miksrv/indi-rollroof-controller)](https://github.com/miksrv/indi-rollroof-controller/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-A fork of the original [INDI Aldiroof](https://github.com/dokeeffe/indi-aldiroof) project by Derek O'Keeffe, designed for simplified roll-off roof mechanisms requiring only two signals: **OPEN** and **CLOSE**.
+**Roll Roof** is an [INDI 2.x](https://indilib.org/) dome driver (`indi_rollroof`) and Arduino firmware for a roll-off observatory roof driven by a **sliding-gate motor**. The gate controller needs only two signals, **OPEN** and **CLOSE**, so the whole electronics is an Arduino UNO, two relays and four switches. The roof moves only when the telescope is parked, checked both by the mount driver and by reed switches on the mount.
 
-This project includes an [INDI](http://indilib.org/) driver (`indi_rollroof`, device name **Roll Roof**) and Arduino firmware to manage a roll-off roof for astronomical observatories. The driver targets **INDI 2.x**.
+Works with KStars / Ekos, the INDI Web Manager and any other INDI client. A fork of [INDI Aldiroof](https://github.com/dokeeffe/indi-aldiroof) by Derek O'Keeffe.
 
-![Observatory in Action](./documentation/allsky-25.gif)
+![The roof opening at dusk, seen by the all-sky camera](documentation/allsky-25.gif)
 
-## Key Features
+## Features
 
-- **Efficient Roof Operation**: Control a motor-driven sliding gate reducer with just two signals.
-- **Hardware Safety**: Limit switches for the roof position and reed switches for the telescope park position.
-- **Mount Interlock**: The roof moves only when the mount is parked both in software (mount driver) and in hardware (reed switches) — see [Safety interlock](#safety-interlock).
-- **Simple Electronics**: Two 30A relays connected to an Arduino handle all roof movements.
-- **Seamless Communication**: Uses the Firmata protocol for interaction between the Arduino and the INDI driver.
+- **Two-signal drive**: a sliding-gate motor controller does the travel, the Arduino only pulses the OPEN or CLOSE relay for 800 ms.
+- **Mount interlock in software and hardware**: the driver refuses to move the roof unless the mount driver reports a settled park, and the firmware ignores OPEN/CLOSE unless both park reed switches are closed. See [Safety interlock](#safety-interlock).
+- **Position feedback**: fully open and fully closed limit switches; the roof state is read fresh on every request.
+- **Standard INDI dome**: park/unpark and motion from Ekos, the Scheduler, the WatchDog or the INDI Control Panel; *Mount Policy* / *Dome Policy* keep the mount and the roof from colliding.
+- **Simple electronics**: Arduino UNO, two 30 A relay modules, four switches, one USB cable. Firmata over serial, no custom protocol stack.
+- **Ready to print**: a 3D-printable case for the board and relays in [`models/`](models/).
 
-![Motor Controller Hardware](./documentation/motor-controller.jpg)
+![Motor controller hardware](documentation/motor-controller.jpg)
 
-## Hardware Requirements
+## How it works
 
-### Components
-- **Microcontroller**: Arduino UNO (or compatible board).
-- **Relays**: Two 30A relay modules.
-- **Sensors**: Two roof limit switches (fully open, fully closed) and two reed switches for the telescope park position (RA and DEC axes).
-- **Server**: A Linux machine running INDI 2.x.
-- *(Optional)* A custom 3D-printed case for the hardware (`models/`).
+```
+ KStars / Ekos ──INDI──▶ Roll Roof driver ──Firmata/USB──▶ Arduino UNO ──relay pulse──▶ gate motor controller
+                             │                                  ▲
+                             │ snoops TELESCOPE_PARK             │ limit switches (open / closed)
+                             ▼                                  │ park reed switches (RA / DEC)
+                        mount driver                        roof and mount
+```
 
-Pinout, signal logic, the controller protocol and troubleshooting tips are in [documentation/hardware.md](./documentation/hardware.md).
+1. A client parks or unparks the roof (`DOME_PARK`) or presses a *Motion* button (`DOME_MOTION`).
+2. The driver checks that the mount driver reports **PARK / Ok** and queries the Arduino for the roof and reed switch state.
+3. Only if both agree that the telescope is parked, the driver sends `OPEN` or `CLOSE`; the firmware checks the reed switches again and pulses the relay.
+4. The gate controller runs the travel; the driver waits for the target limit switch (up to 19 s) and reports the new roof state.
 
-## Software Setup
+## Hardware
 
-### 1. Flashing the Arduino Firmware
+| Part | Notes |
+| ---- | ----- |
+| Arduino UNO (or compatible) | Runs the Firmata-based firmware at 57600 baud |
+| 2 × 30 A relay module | One pulses OPEN, one pulses CLOSE on the gate motor controller |
+| 2 × limit switch | Roof fully open, roof fully closed |
+| 2 × reed switch | Telescope park position on the RA and DEC axes |
+| Linux host with INDI 2.x | Raspberry Pi, mini PC, anything that runs the INDI server |
+| 3D-printed case (optional) | STL files and labels in [`models/`](models/) |
+
+Pinout, signal levels, the controller protocol (`OPEN` / `CLOSE` / `ABORT` / `QUERY`) and troubleshooting are in [documentation/hardware.md](documentation/hardware.md).
+
+![Arduino wiring diagram](documentation/arduino-controller.jpg)
+
+Before the first run make sure that:
+
+- the limit switches detect the fully open and fully closed states and the roof cannot overrun them (a lost mechanical stop lets the roof travel past the open switch);
+- the reed switches close only at the mount's park position, and that position matches the park position stored in the mount driver.
+
+## Getting started
+
+### 1. Flash the firmware
+
 1. Open the [Arduino IDE](https://www.arduino.cc/en/software) and install the **Firmata** library.
-2. Connect your Arduino board to your computer.
-3. Open `arduino-firmware/RoofController/RoofController.ino` and upload the firmware.
+2. Open `arduino-firmware/RoofController/RoofController.ino` and upload it to the board.
 
-Keep the sketch name `RoofController`: Firmata reports it as the firmware name, and the driver refuses to work with a board whose firmware name does not contain `RoofController`.
+Keep the sketch name `RoofController`: Firmata reports it as the firmware name, and the driver refuses to work with a board whose firmware name does not contain it.
 
-### 2. Building and Installing the INDI Driver
+### 2. Build and install the driver
 
-1. **Install the dependencies** (INDI 2.x development files and libnova, whose headers INDI includes). The [INDI PPA](https://launchpad.net/~mutlaqja/+archive/ubuntu/ppa) has the current INDI 2.x release for Ubuntu 26.04; distribution packages of older Ubuntu releases are INDI 1.x, which the driver no longer supports (CMake stops with "INDI 2.x is required"):
-   ```bash
-   sudo add-apt-repository ppa:mutlaqja/ppa
-   sudo apt-get update
-   sudo apt-get install -y cmake libindi-dev libnova-dev
-   ```
+The driver needs the INDI 2.x development files and libnova. On Ubuntu 26.04 the [INDI PPA](https://launchpad.net/~mutlaqja/+archive/ubuntu/ppa) has the current INDI 2.x release; the distribution packages of older Ubuntu releases are INDI 1.x, which the driver no longer supports (CMake stops with "INDI 2.x is required").
 
-2. **Clone the repository**:
-   ```bash
-   git clone https://github.com/miksrv/indi-rollroof-controller.git
-   cd indi-rollroof-controller
-   ```
+```bash
+sudo add-apt-repository ppa:mutlaqja/ppa
+sudo apt-get update
+sudo apt-get install -y cmake libindi-dev libnova-dev
 
-3. **Build and install the driver**:
-   ```bash
-   ./indi-driver/build.sh
-   ```
-   The script configures the driver with CMake in `indi-driver/build`, compiles it and runs `sudo make install`, which installs:
-   - `/usr/bin/indi_rollroof` — the driver;
-   - `/usr/share/indi/indi_rollroof.xml` — its description, so **Roll Roof** appears under *Domes* in the INDI Web Manager and Ekos without editing `drivers.xml`.
+git clone https://github.com/miksrv/indi-rollroof-controller.git
+cd indi-rollroof-controller
+./indi-driver/build.sh
+```
 
-   To build by hand: `cmake -B build indi-driver/indi-rollroof && cmake --build build && sudo cmake --install build` (the install prefix defaults to `/usr`).
+The script configures the driver with CMake in `indi-driver/build`, compiles it and runs `sudo make install`, which installs:
+
+- `/usr/bin/indi_rollroof` — the driver;
+- `/usr/share/indi/indi_rollroof.xml` — its description, so **Roll Roof** appears under *Domes* in the INDI Web Manager and Ekos without editing `drivers.xml`.
+
+To build by hand: `cmake -B build indi-driver/indi-rollroof && cmake --build build && sudo cmake --install build` (the install prefix defaults to `/usr`).
 
 ### 3. Configuring the Driver
 
@@ -87,29 +110,52 @@ At the park position the telescope must clear the moving roof; in any other posi
 Otherwise the command is refused (`DOME_PARK` / `DOME_MOTION` go to Alert) and the reason is logged, e.g. *"The telescope is NOT PARKED in software (or its park state is unknown), the roof cannot be moved!"*.
 
 Notes:
+
 - After the mount refuses to unpark (because of *Dome locks*), its park vector stays in Alert, so the roof stays blocked until the mount driver reports a settled park again (e.g. after reconnecting it). This is intentional.
 - The driver only refuses unsafe commands; it never parks the mount by itself. For automatic shutdown (weather, client loss) let the Ekos Scheduler or the INDI WatchDog park the mount **first** and the roof **second**.
+- A travel cannot be stopped once started: the gate controller runs it to the end. `ABORT` only stops the driver waiting for the limit switch; it is not an emergency stop.
 - The motor run is limited to 19 s; if the target limit switch is not reached by then, the driver stops waiting and reports the roof state as unknown.
 
-## Wiring and Hardware Setup
-- Wire the Arduino with relays, sensors, and motor as outlined in the wiring diagram below and in [documentation/hardware.md](./documentation/hardware.md).
-- Ensure that:
-  - Limit switches detect the fully open and fully closed states, and the roof cannot overrun them (a lost mechanical stop lets the roof travel past the open switch).
-  - Reed switches close only at the mount's park position, and that this position matches the park position stored in the mount driver.
+## Project structure
 
-![Arduino Wiring Diagram](./documentation/arduino-controller.jpg)
+```
+indi-driver/
+  build.sh                  configure, build and sudo make install
+  indi-rollroof/
+    rollroof.cpp, .h        the driver (INDI::Dome subclass)
+    indi_rollroof.xml.cmake driver description for the INDI Web Manager / Ekos
+    libfirmata/             bundled Firmata client
+arduino-firmware/
+  RoofController/           the sketch (StandardFirmata-based, 57600 baud)
+documentation/
+  hardware.md               pinout, signal levels, protocol, troubleshooting
+models/                     3D-printable case and labels
+CHANGELOG.md                what changed in each release
+```
+
+## Development
+
+```bash
+# Driver: build only (needs libindi-dev and libnova-dev, see above)
+cmake -B build indi-driver/indi-rollroof && cmake --build build
+
+# Firmware: compile check, as in CI
+arduino-cli core install arduino:avr && arduino-cli lib install Firmata
+arduino-cli compile --fqbn arduino:avr:uno arduino-firmware/RoofController
+```
+
+Every pull request builds and installs the driver against INDI 2.x and compiles the firmware for the Arduino Uno in GitHub Actions; both checks must pass before merging into `main`. There are no unit tests: real verification happens on the observatory host with the hardware, and the roof is only moved with the owner watching.
+
+Releases follow [CHANGELOG.md](CHANGELOG.md): the version lives in `indi-driver/indi-rollroof/CMakeLists.txt`, every bump gets a section in the changelog and a `vX.Y.Z` tag with a [GitHub release](https://github.com/miksrv/indi-rollroof-controller/releases).
 
 ## Contributing
 
-Contributions are welcome! If you encounter bugs or have suggestions for improvements:
-1. Fork the repository.
-2. Create a feature branch.
-3. Submit a pull request.
+Bug reports and pull requests are welcome. Fork the repository, create a branch, and open a pull request against `main`. Changes to the driver's `Move()` checks or to the firmware's reed switch check are safety-relevant: please explain in the PR why the roof still cannot hit the telescope.
 
 ## Acknowledgments
 
-This project is based on the work of [Derek O'Keeffe](https://github.com/dokeeffe/indi-aldiroof) and leverages the powerful [INDI Library](http://indilib.org/).  
-Special thanks to the open-source community for enabling projects like this.
+Based on [INDI Aldiroof](https://github.com/dokeeffe/indi-aldiroof) by Derek O'Keeffe and built on the [INDI Library](https://indilib.org/).
 
-### License
-This project is licensed under the [MIT License](./LICENSE).
+## License
+
+[MIT](LICENSE).
