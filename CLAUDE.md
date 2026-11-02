@@ -23,7 +23,7 @@ arduino-cli core install arduino:avr && arduino-cli lib install Firmata
 arduino-cli compile --fqbn arduino:avr:uno arduino-firmware/RoofController
 ```
 
-There are no unit tests. CI (`.github/workflows/`): `driver-build.yml` builds and installs the driver in an `ubuntu:26.04` container with INDI 2.x from the INDI PPA (older Ubuntu releases only have INDI 1.x; the `ubuntu-26.04` runner itself prefers amd64v3 archive packages, i.e. INDI 1.9); `firmware-build.yml` compiles the sketch with `arduino/compile-sketches`. Actions are pinned by commit SHA with the version in a comment; Dependabot (`.github/dependabot.yml`) updates them. Real verification happens on the observatory host with the hardware.
+There are no unit tests. CI is one workflow, `.github/workflows/checks.yml`: a `changes` job (dorny/paths-filter) decides what ran; `driver` builds and installs the driver in an `ubuntu:26.04` container with INDI 2.x from the INDI PPA (older Ubuntu releases only have INDI 1.x; the `ubuntu-26.04` runner itself prefers amd64v3 archive packages, i.e. INDI 1.9) when `indi-driver/` changed; `firmware` compiles the sketch with `arduino/compile-sketches` when `arduino-firmware/` changed; `checks` ("Checks passed") always runs, fails if a build failed, and is the only status check the `main` ruleset requires. Keep that structure: new checks go in as path-gated jobs that `checks` needs. Actions are pinned by commit SHA with the version in a comment; Dependabot (`.github/dependabot.yml`) updates them. Real verification happens on the observatory host with the hardware.
 
 ## Safety — read before changing the driver or firmware
 

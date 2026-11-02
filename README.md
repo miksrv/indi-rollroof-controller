@@ -1,7 +1,6 @@
 # Roll Roof — INDI roll-off roof controller
 
-[![Driver build](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/driver-build.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/driver-build.yml)
-[![Firmware build](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/firmware-build.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/firmware-build.yml)
+[![Checks](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/checks.yml/badge.svg)](https://github.com/miksrv/indi-rollroof-controller/actions/workflows/checks.yml)
 [![Release](https://img.shields.io/github/v/release/miksrv/indi-rollroof-controller)](https://github.com/miksrv/indi-rollroof-controller/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -144,7 +143,7 @@ arduino-cli core install arduino:avr && arduino-cli lib install Firmata
 arduino-cli compile --fqbn arduino:avr:uno arduino-firmware/RoofController
 ```
 
-Every pull request builds and installs the driver against INDI 2.x and compiles the firmware for the Arduino Uno in GitHub Actions; both checks must pass before merging into `main`. There are no unit tests: real verification happens on the observatory host with the hardware, and the roof is only moved with the owner watching.
+Every pull request runs the *Checks* workflow (`.github/workflows/checks.yml`): the driver is built and installed against INDI 2.x when `indi-driver/` changed, the firmware is compiled for the Arduino Uno when `arduino-firmware/` changed, and the final *Checks passed* job, the only status check `main` requires, fails if any of those builds failed. There are no unit tests: real verification happens on the observatory host with the hardware, and the roof is only moved with the owner watching.
 
 Releases follow [CHANGELOG.md](CHANGELOG.md): the version lives in `indi-driver/indi-rollroof/CMakeLists.txt`, every bump gets a section in the changelog and a `vX.Y.Z` tag with a [GitHub release](https://github.com/miksrv/indi-rollroof-controller/releases).
 
