@@ -30,8 +30,15 @@ static std::unique_ptr<RollRoof> rollOff(new RollRoof());
 // How often the controller is queried while a travel is in progress (ms)
 #define MOTION_POLL_MS 500
 
-// Default interval of the status query while the roof is idle (s)
-#define DEFAULT_STATUS_POLL 5
+// Default interval of the status query while the roof is idle (ms, the standard Polling period)
+#define DEFAULT_STATUS_POLL_MS 5000
+
+// Shortest idle poll, and the poll while the controller does not answer (ms)
+#define MIN_STATUS_POLL_MS     1000
+#define OFFLINE_STATUS_POLL_MS 30000
+
+// A roof change this long after the driver's own OPEN/CLOSE is not "moved by other means" (s)
+#define OWN_TRAVEL_GRACE 60
 
 RollRoof::RollRoof()
 {
@@ -56,6 +63,9 @@ bool RollRoof::initProperties()
     INDI::Dome::initProperties();
 
     SetParkDataType(PARK_NONE);
+
+    // Options -> Polling: how often the roof and the reed switches are checked while idle
+    setDefaultPollingPeriod(DEFAULT_STATUS_POLL_MS);
     addAuxControls();
 
     IUFillText(&CurrentStateT[0], "ROOF", "Position status", NULL);
@@ -63,9 +73,6 @@ bool RollRoof::initProperties()
 
     IUFillText(&CurrentParkT[0], "TELESCOPE", "Park status", NULL);
     IUFillTextVector(&CurrentParkTP, CurrentParkT, 1, getDeviceName(), "TELESCOPE", "Telescope", MAIN_CONTROL_TAB,IP_RO, 60, IPS_IDLE);
-
-    StatusPollNP[0].fill("PERIOD", "Period (s)", "%.0f", 2, 60, 1, DEFAULT_STATUS_POLL);
-    StatusPollNP.fill(getDeviceName(), "STATUS_POLL", "Status poll", OPTIONS_TAB, IP_RW, 60, IPS_IDLE);
 
     return true;
 }
@@ -173,27 +180,6 @@ bool RollRoof::ISNewSwitch (const char *dev, const char *name, ISState *states, 
 	return INDI::Dome::ISNewSwitch(dev, name, states, names, n);
 }
 
-bool RollRoof::ISNewNumber (const char *dev, const char *name, double values[], char *names[], int n)
-{
-    if (dev != nullptr && !strcmp(dev, getDeviceName()) && StatusPollNP.isNameMatch(name))
-    {
-        StatusPollNP.update(values, names, n);
-        StatusPollNP.setState(IPS_OK);
-        StatusPollNP.apply();
-        saveConfig(true, StatusPollNP.getName());
-
-        LOGF_INFO("Roof status is queried every %.0f s", StatusPollNP[0].getValue());
-
-        // Apply the new period now, unless a travel is being watched
-        if (isConnected() && DomeMotionSP.getState() != IPS_BUSY)
-            armTimer(statusPollMs());
-
-        return true;
-    }
-
-    return INDI::Dome::ISNewNumber(dev, name, values, names, n);
-}
-
 /**
  * Update properties from Arduino controller
  */
@@ -203,6 +189,9 @@ bool RollRoof::updateProperties()
 
     if (isConnected())
     {
+        // Saved park state first, so the first query only changes it if the roof really moved
+        InitPark();
+
         // Publish the full state on (re)connect, then keep it fresh while idle
         lastRoofState       = 0;
         lastParkState       = 0;
@@ -211,20 +200,15 @@ bool RollRoof::updateProperties()
 
         defineProperty(&CurrentStateTP);
         defineProperty(&CurrentParkTP);
-        defineProperty(StatusPollNP);
 
         armTimer(statusPollMs());
     }
 
     else {
-        if (timerID >= 0) {
-            RemoveTimer(timerID);
-            timerID = -1;
-        }
+        stopTimer();
 
 	   deleteProperty(CurrentStateTP.name);
        deleteProperty(CurrentParkTP.name);
-       deleteProperty(StatusPollNP);
     }
 
     return true;
@@ -235,10 +219,7 @@ bool RollRoof::updateProperties()
 */
 bool RollRoof::Disconnect()
 {
-    if (timerID >= 0) {
-        RemoveTimer(timerID);
-        timerID = -1;
-    }
+    stopTimer();
 
     if (sf != nullptr) {
         sf->closePort();
@@ -261,11 +242,38 @@ void RollRoof::armTimer(uint32_t ms)
     timerID = SetTimer(ms);
 }
 
+void RollRoof::stopTimer()
+{
+    if (timerID >= 0)
+        RemoveTimer(timerID);
+
+    timerID = -1;
+}
+
 uint32_t RollRoof::statusPollMs()
 {
-    double seconds = StatusPollNP[0].getValue();
+    uint32_t ms = getCurrentPollingPeriod();
 
-    return static_cast<uint32_t>((seconds >= 2 ? seconds : DEFAULT_STATUS_POLL) * 1000);
+    if (ms < MIN_STATUS_POLL_MS)
+        ms = MIN_STATUS_POLL_MS;
+
+    if (!controllerAnswering && ms < OFFLINE_STATUS_POLL_MS)
+        ms = OFFLINE_STATUS_POLL_MS;
+
+    return ms;
+}
+
+void RollRoof::showUnknownState()
+{
+    if (lastRoofState != '?') {
+        IUSaveText(&CurrentStateT[0], "UNKNOWN");
+        IDSetText(&CurrentStateTP, NULL);
+        IUSaveText(&CurrentParkT[0], "UNKNOWN");
+        IDSetText(&CurrentParkTP, NULL);
+    }
+
+    lastRoofState = '?';
+    lastParkState = '?';
 }
 
 void RollRoof::showRoofText(const char *text)
@@ -349,10 +357,7 @@ void RollRoof::TimerHit()
 
 bool RollRoof::saveConfigItems(FILE *fp)
 {
-    INDI::Dome::saveConfigItems(fp);
-    StatusPollNP.save(fp);
-
-    return true;
+    return INDI::Dome::saveConfigItems(fp);
 }
 
 /**
@@ -408,6 +413,8 @@ IPState RollRoof::Move(DomeDirection dir, DomeMotionCommand operation)
             LOG_INFO("Sending command CLOSE ...");
             sf->sendStringData((char *)"CLOSE");
         }
+
+        gettimeofday(&lastCommand, NULL);
 
         MotionRequest = MAX_ROLLOFF_DURATION;
         gettimeofday(&MotionStart,NULL);
@@ -542,15 +549,7 @@ bool RollRoof::getControllerState()
     bTelescopeParkingRA   = false;
 
     if ( ! queryController()) {
-        if (lastRoofState != '?') {
-            IUSaveText(&CurrentStateT[0], "UNKNOWN");
-            IDSetText(&CurrentStateTP, NULL);
-            IUSaveText(&CurrentParkT[0], "UNKNOWN");
-            IDSetText(&CurrentParkTP, NULL);
-        }
-
-        lastRoofState = '?';
-        lastParkState = '?';
+        showUnknownState();
         return false;
     }
 
@@ -559,7 +558,11 @@ bool RollRoof::getControllerState()
     LOGF_DEBUG("QUERY: Response = %s", stateString.c_str());
 
     if (stateString.size() < 2) {
-        LOGF_WARN("Unexpected controller response: '%s'", stateString.c_str());
+        // Logged once, like a missing answer, not on every poll
+        if (lastRoofState != '?')
+            LOGF_WARN("Unexpected controller response: '%s'", stateString.c_str());
+
+        showUnknownState();
         return false;
     }
 
@@ -605,9 +608,14 @@ bool RollRoof::getControllerState()
     if (changed) {
         bool known = lastRoofState == '1' || lastRoofState == '2' || lastRoofState == '3';
 
+        // A travel this driver started may still end after an abort or the safety timeout
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        bool ownTravel = lastCommand.tv_sec != 0 && now.tv_sec - lastCommand.tv_sec < OWN_TRAVEL_GRACE;
+
         // The roof changed while the driver did not move it: the gate controller's own remote,
         // a power relay or someone on site
-        if (known && !watching)
+        if (known && !watching && !ownTravel)
             LOGF_WARN("Roof position changed without a command from this driver: %s", roofStateString);
         else
             LOGF_INFO("Roof position state: %s", roofStateString);
@@ -633,8 +641,12 @@ bool RollRoof::getControllerState()
             }
         }
 
+        // Neither limit switch (stopped part-way, or still travelling after an abort): not
+        // parked, so a shutdown really closes it; DOME_PARK goes Idle with neither switch on,
+        // which keeps a mount with Dome locks locked (it only follows a settled PARK/UNPARK)
         else {
             setDomeState(DOME_IDLE);
+            setDomeState(DOME_UNKNOWN);
         }
     }
 

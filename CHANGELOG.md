@@ -8,8 +8,9 @@ The roof and the telescope park switches are now shown as they are, even when th
 
 - Driver: checks the roof and the park reed switches every 5 s while idle, not only around its own moves
 - Driver: a roof opened or closed by other means (gate remote, power relay) updates the dome park state
+- Driver: a roof stopped part-way is no longer reported as parked, so a shutdown closes it
 - Driver: such a change is logged as a warning, so an unplanned roof move shows up in Ekos
-- Driver: new *Options → Status poll* setting (2–60 s) for how often the state is checked
+- Driver: *Options → Polling* sets how often the state is checked (default 5000 ms, at least 1000)
 - Driver: roof status reads `OPEN` / `CLOSED`; the log only notes changes, not every check
 
 ## 2.0.1

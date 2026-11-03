@@ -35,7 +35,7 @@ Works with KStars / Ekos, the INDI Web Manager and any other INDI client. A fork
 2. The driver checks that the mount driver reports **PARK / Ok** and queries the Arduino for the roof and reed switch state.
 3. Only if both agree that the telescope is parked, the driver sends `OPEN` or `CLOSE`; the firmware checks the reed switches again and pulses the relay.
 4. The gate controller runs the travel; the driver waits for the target limit switch (up to 19 s) and reports the new roof state.
-5. While the roof is idle the driver asks the Arduino for the switches every *Status poll* seconds (5 by default). If the roof was opened or closed without the driver, `DOME_PARK` follows the limit switches and a warning is logged; the roof (`ROOF`) and reed switch (`TELESCOPE`) status texts always show the last answer.
+5. While the roof is idle the driver asks the Arduino for the switches every *Polling* period (5 s by default). If the roof was opened or closed without the driver, `DOME_PARK` follows the limit switches and a warning is logged; the roof (`ROOF`) and reed switch (`TELESCOPE`) status texts always show the last answer.
 
 ## Hardware
 
@@ -95,7 +95,7 @@ Add **Roll Roof** (Dome) to your INDI Web Manager / Ekos profile together with t
 2. **Roll Roof → Options → Snoop devices → Telescope** (`ACTIVE_TELESCOPE`): the mount driver name, e.g. `EQMod Mount`. The interlock watches this device.
 3. **Roll Roof → Options → Mount Policy**: `Mount locks` — the roof will not close while the mount is unparked.
 4. **Mount → Options → Dome Policy**: `Dome locks` and **ACTIVE_DOME** = `Roll Roof` — the mount will not unpark while the roof is closed.
-5. **Roll Roof → Options → Status poll**: how often the roof and the reed switches are checked while idle (2–60 s, default 5). Each check is a short `QUERY`; the Arduino is not affected by frequent checks.
+5. **Roll Roof → Options → Polling**: how often the roof and the reed switches are checked while idle (default 5000 ms, at least 1000; every 30 s while the controller does not answer). Each check is a short `QUERY`; the Arduino is not affected by frequent checks.
 6. Save the configuration of both drivers.
 
 Parking the roof (`DOME_PARK`) closes it, unparking opens it. The roof can also be moved with the *Motion* buttons (`DOME_MOTION`); the same interlock applies.
@@ -115,7 +115,7 @@ Notes:
 - After the mount refuses to unpark (because of *Dome locks*), its park vector stays in Alert, so the roof stays blocked until the mount driver reports a settled park again (e.g. after reconnecting it). This is intentional.
 - The driver only refuses unsafe commands; it never parks the mount by itself. For automatic shutdown (weather, client loss) let the Ekos Scheduler or the INDI WatchDog park the mount **first** and the roof **second**.
 - A travel cannot be stopped once started: the gate controller runs it to the end. `ABORT` only stops the driver waiting for the limit switch; it is not an emergency stop.
-- A roof opened without the driver (gate remote, power relay) is seen within one *Status poll* and reported as unparked, so a WatchDog or Scheduler shutdown closes it again, through the same interlock.
+- A roof opened without the driver (gate remote, power relay) is seen within one *Polling* period and reported as unparked, so a WatchDog or Scheduler shutdown closes it again, through the same interlock. A roof stopped part-way (neither limit switch) is reported as neither parked nor unparked: a shutdown closes it, and a mount with *Dome locks* stays locked, since it only follows a settled park state.
 - The motor run is limited to 19 s; if the target limit switch is not reached by then, the driver stops waiting and reports the roof state as unknown.
 
 ## Project structure

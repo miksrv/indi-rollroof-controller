@@ -19,7 +19,6 @@ class RollRoof : public INDI::Dome
         bool updateProperties() override;
         virtual bool ISSnoopDevice (XMLEle *root) override;
         virtual bool ISNewSwitch (const char *dev, const char *name, ISState *states, char *names[], int n) override;
-        virtual bool ISNewNumber (const char *dev, const char *name, double values[], char *names[], int n) override;
         virtual bool saveConfigItems(FILE *fp) override;
 
       protected:
@@ -47,7 +46,12 @@ class RollRoof : public INDI::Dome
 
         // One timer at a time: a new one replaces the pending one
         void armTimer(uint32_t ms);
+        void stopTimer();
+        // Idle status poll interval: the standard Polling period, backed off while the
+        // controller does not answer (every unanswered query blocks the driver for ~1 s)
         uint32_t statusPollMs();
+        // Publish "UNKNOWN" once when the controller does not answer or answers garbage
+        void showUnknownState();
         // Show a transient roof text (moving, aborted); the next query publishes the real state again
         void showRoofText(const char *text);
 
@@ -59,10 +63,9 @@ class RollRoof : public INDI::Dome
         // Whether the last query was answered (the "no response" warning is logged once, not per poll)
         bool controllerAnswering = true;
 
-        // How often the controller is queried while the roof is idle, so a roof moved by other
-        // means (the gate controller's own remote, a power relay) and the park reed switches
-        // are always shown as they are
-        INDI::PropertyNumber StatusPollNP {1};
+        // When this driver last sent OPEN/CLOSE: a travel it started may still end after an
+        // abort or the safety timeout, which is not a roof "moved by other means"
+        struct timeval lastCommand {};
 
         // Park state of the ACTIVE_TELESCOPE as last reported by its driver.
         // Unknown (never reported, disconnected, busy, alert) is treated as NOT parked.
