@@ -12,8 +12,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(FIRMATA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libfirmata/src/")
 # The driver version: the single source for the driver XML and DRIVER_INFO
 set (VERSION_MAJOR 2)
-set (VERSION_MINOR 0)
-set (VERSION_PATCH 1)
+set (VERSION_MINOR 1)
+set (VERSION_PATCH 0)
 
 # INDI 2.x: headers in <prefix>/include/libindi, driver API in libindidriver
 find_path(INDI_INCLUDE_DIR indidome.h PATH_SUFFIXES libindi REQUIRED)

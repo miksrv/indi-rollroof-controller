@@ -44,6 +44,29 @@ class RollRoof : public INDI::Dome
         bool queryController();
         bool isMountSoftwareParked();
 
+        // One timer at a time: a new one replaces the pending one
+        void armTimer(uint32_t ms);
+        void stopTimer();
+        // Idle status poll interval: the standard Polling period, backed off while the
+        // controller does not answer (every unanswered query blocks the driver for ~1 s)
+        uint32_t statusPollMs();
+        // Publish "UNKNOWN" once when the controller does not answer or answers garbage
+        void showUnknownState();
+        // Show a transient roof text (moving, aborted); the next query publishes the real state again
+        void showRoofText(const char *text);
+
+        int timerID = -1;
+
+        // Last published controller answer ('1'/'2'/'3', park '0'..'3'); 0 = nothing published yet
+        char lastRoofState = 0;
+        char lastParkState = 0;
+        // Whether the last query was answered (the "no response" warning is logged once, not per poll)
+        bool controllerAnswering = true;
+
+        // When this driver last sent OPEN/CLOSE: a travel it started may still end after an
+        // abort or the safety timeout, which is not a roof "moved by other means"
+        struct timeval lastCommand {};
+
         // Park state of the ACTIVE_TELESCOPE as last reported by its driver.
         // Unknown (never reported, disconnected, busy, alert) is treated as NOT parked.
         bool mountParkKnown = false;
